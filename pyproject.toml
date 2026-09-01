@@ -1,0 +1,27 @@
+[project]
+name = "minipresidente"
+version = "1.0.0"
+description = "Screen sharing over LAN - like Discord but peer-to-peer"
+requires-python = ">=3.10"
+dependencies = [
+    "PySide6>=6.5",
+    "mss>=9.0",
+    "Pillow>=10.0",
+]
+
+[project.scripts]
+minipresidente = "app.main:main"
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I"]
+ignore = ["E501"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
