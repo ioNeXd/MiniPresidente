@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import Dict
 
-from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal
+from PySide6.QtCore import QObject, Qt, QThread, Signal
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (
     QGridLayout,
@@ -98,8 +98,6 @@ class RoomWindow(QMainWindow):
         self.session.peer_disconnected.connect(self._remove_tile)
         self.session.peer_list_changed.connect(self._update_peers)
         self.session.transmission_changed.connect(self._update_transmit_button)
-        self.timer = QTimer(self)
-        self.timer.start(1000)
 
     def _build_ui(self) -> None:
         central = QWidget()
@@ -215,7 +213,6 @@ class RoomWindow(QMainWindow):
             event.accept()
             return
         self._session_stopped = True
-        self.timer.stop()
         self.session.stop()
         from app.ui.lobby_window import LobbyWindow
 

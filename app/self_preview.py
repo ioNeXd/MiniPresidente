@@ -2,25 +2,29 @@ from __future__ import annotations
 
 # ─── self_preview.py ───────────────────────────────────────────────────────
 # Captura local (só pra você) enquanto está transmitindo, pra mostrar
-# "qual tela está sendo transmitida" na sua própria janela — isso é o
-# preview com imagem real que faltava no MiniPresidente original.
+# "qual tela está sendo transmitida" na sua própria janela. Usa o mesmo
+# formato de frame (RGB cru + width/height) que os tiles da sala esperam,
+# consistente com o que o H264Decoder entrega para os streams remotos.
 # ─────────────────────────────────────────────────────────────────────────────
 import logging
 import threading
 from typing import Callable
 
-from app.capture import capture_loop
+from app.capture import capture_loop_rgb
 from app.session_config import SessionConfig
 
 logger = logging.getLogger(__name__)
 
 
 class SelfPreview:
-    def __init__(self, session_config: SessionConfig, on_frame: Callable[[bytes], None]):
+    def __init__(self, session_config: SessionConfig,
+                 on_frame: Callable[[bytes, int, int], None]):
         self.on_frame = on_frame
         self.monitor_index = session_config.monitor_index
-        self.fps = session_config.fps
-        self.quality = session_config.jpeg_quality
+        # Usa o mesmo FPS configurado para a transmissão real (video_fps),
+        # não o `fps` legado (não configurável na lobby) — assim o preview
+        # local reflete fielmente o que está sendo enviado aos outros peers.
+        self.fps = session_config.video_fps
         self.max_width = session_config.max_width
         self._running = False
         self._thread: threading.Thread | None = None
@@ -38,12 +42,11 @@ class SelfPreview:
         logger.info("SelfPreview stopped")
 
     def _run(self) -> None:
-        capture_loop(
+        capture_loop_rgb(
             running=lambda: self._running,
             fps=self.fps,
             on_frame=self.on_frame,
             monitor_index=self.monitor_index,
-            quality=self.quality,
             max_width=self.max_width,
             logger=logger,
         )

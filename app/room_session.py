@@ -77,8 +77,8 @@ class RoomSession(QObject):
         port = self.stream_server.start()
         self.discovery.set_transmitting(True, port)
 
-        def on_frame(data: bytes) -> None:
-            self.frame_ready.emit(self.discovery.user_id, data)
+        def on_frame(data: bytes, width: int, height: int) -> None:
+            self.frame_ready.emit(self.discovery.user_id, data, width, height)
 
         self.self_preview = SelfPreview(self.session_config, on_frame)
         self.self_preview.start()

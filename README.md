@@ -6,16 +6,17 @@ Compartilhamento de tela peer-to-peer para redes locais (LAN) ou VPNs. Qualquer 
 
 - **Descoberta automática de peers** via broadcast UDP em LAN física
 - **Descoberta via VPN** com unicast para seed peers + gossip automático
-- **Transmissão de tela em tempo real** — JPEG sobre TCP, captura via `mss` (Windows, Linux e Mac)
+- **Transmissão de tela em tempo real** — vídeo codificado em **H.264** (via PyAV/libx264), captura via `mss` (Windows, Linux e Mac)
+- **Qualidade configurável** — resolução (360p a 1440p ou resolução de origem), FPS (5/15/30/60/120) e bitrate de vídeo ajustáveis na lobby antes de entrar na sala
 - **Grid de telas lado a lado** — assista as telas de todos os membros da sala
-- **Preview local** — veja sua própria tela sendo transmitida
+- **Preview local fiel** — veja sua própria tela sendo transmitida, no mesmo FPS e formato usados na transmissão real
 - **Interface gráfica** — lobby + janela da sala com grid de telas e lista de membros
 - **Empacotamento** — executável standalone via PyInstaller
 - **Auto-update** — verificação automática de atualizações via GitHub Releases (Windows frozen)
 
 ## Como instalar (terminal)
 
-Precisa de **Python 3.10+**.
+Precisa de **Python 3.10+**. A codificação de vídeo usa [PyAV](https://pyav.org/), que já traz o FFmpeg/libx264 embutido no pacote — não é necessário instalar FFmpeg separadamente na maioria dos sistemas.
 
 ```bash
 # Clonar
@@ -76,19 +77,34 @@ O broadcast UDP **não funciona** em VPNs como Radmin e Hamachi (o tráfego broa
 3. No campo **IPs de peers**, digite o IP de pelo menos um amigo na VPN (ex: `25.10.10.5, 25.10.10.8`)
 4. Entre na sala — os peers conectados irão propagar o anúncio para outros
 
+## Qualidade de vídeo
+
+Antes de entrar na sala, a lobby permite ajustar:
+
+| Opção | Valores | Padrão |
+|---|---|---|
+| Resolução | 360p / 480p / 720p / 1080p / 1440p / origem (resolução nativa do monitor) | 1080p |
+| FPS | 5 / 15 / 30 / 60 / 120 | 30 |
+| Bitrate de vídeo | varia por resolução (ex: 2500–12000 kbps em 1080p) | conforme preset da resolução |
+
+Cada resolução tem uma faixa de bitrate mínima/máxima associada (ver `RESOLUTION_PRESETS` em `app/session_config.py`). A lobby avisa quando a combinação escolhida (ex: 1440p a 120 FPS) tende a ser pesada sem uma placa dedicada.
+
+> **Nota:** a lobby também expõe um seletor de bitrate de áudio, mas **a captura/transmissão de áudio ainda não está implementada** — ver Limitações conhecidas.
+
 ## Configuração
 
-Edite `app/config.py` para ajustar:
+Edite `app/config.py` para ajustar as constantes de base do sistema:
 
 | Constante | Padrão | Descrição |
 |---|---|---|
-| `DEFAULT_FPS` | `15` | Frames por segundo do stream |
-| `DEFAULT_JPEG_QUALITY` | `60` | Qualidade JPEG (1-95) |
-| `DEFAULT_MAX_WIDTH` | `1280` | Resolução máxima (downscale automático) |
+| `DEFAULT_MAX_WIDTH` | `1280` | Largura máxima usada como fallback (a resolução escolhida na lobby tem prioridade) |
+| `MAX_FRAME_BYTES` | `32 MiB` | Limite do protocolo de framing TCP — rejeita payloads de vídeo absurdamente grandes |
 | `GRID_COLUMNS` | `2` | Colunas no grid de telas da sala |
 | `DISCOVERY_PORT` | `47001` | Porta UDP para descoberta de peers |
 | `BROADCAST_INTERVAL_S` | `1.5` | Intervalo entre anúncios de presença (segundos) |
 | `PEER_TIMEOUT_S` | `5.0` | Tempo sem anúncio até considerar peer offline (segundos) |
+
+Resolução, FPS e bitrate de vídeo/áudio são configurados por sessão na lobby (ver `app/session_config.py`), não em `config.py`.
 
 ## Auto-update (Windows frozen)
 
@@ -116,16 +132,19 @@ O programa verifica automaticamente novas versões via GitHub Releases:
 
 ```
 app/
-  config.py           # constantes, __version__, configurações
+  config.py           # constantes globais, __version__, configurações fixas
+  session_config.py    # config por sessão: resolução, FPS, bitrate, presets de qualidade
   discovery.py         # descoberta de peers (broadcast + unicast/gossip)
-  capture.py           # captura de tela + encode JPEG (mss + Pillow, thread-local)
-  stream_server.py     # servidor TCP — frame compartilhado para todos os viewers
-  stream_client.py     # cliente TCP — recebe frames de um transmissor
-  self_preview.py      # preview local da tela sendo transmitida
+  capture.py           # captura de tela (mss + Pillow, thread-local); RGB cru p/ H.264
+  video_codec.py       # encoder/decoder H.264 (PyAV/libx264)
+  stream_server.py     # servidor TCP — encoda e distribui frames H.264 para todos os viewers
+  stream_client.py     # cliente TCP — recebe e decodifica o stream H.264 de um transmissor
+  self_preview.py       # preview local (RGB cru), no mesmo FPS/formato da transmissão real
+  room_session.py      # orquestra discovery + transmissão + viewers de uma sala
   updater.py           # lógica de auto-update (fetch, download, verify, install)
-  update_state.py      # estado persistente do auto-update (JSON)
+  update_state.py       # estado persistente do auto-update (JSON)
   ui/
-    lobby_window.py    # tela inicial (nome, sala, IP, seed peers)
+    lobby_window.py    # tela inicial (nome, sala, IP, seed peers, qualidade de vídeo)
     room_window.py     # sala: grid de telas + membros + botão transmitir/atualizar
     update_dialog.py   # dialog modal de atualização com download
   main.py              # ponto de entrada + UpdateController
@@ -138,13 +157,14 @@ tests/
 ## Dependências
 
 - [PySide6](https://doc.qt.io/qtforpython-6/) — interface gráfica (Qt)
+- [PyAV](https://pyav.org/) — encoding/decoding de vídeo H.264 (bindings do FFmpeg/libx264)
 - [mss](https://python-mss.readthedocs.io/) — captura de tela multi-plataforma
-- [Pillow](https://pillow.readthedocs.io/) — compressão JPEG
+- [Pillow](https://pillow.readthedocs.io/) — redimensionamento de frame antes do encode
 - [packaging](https://packaging.pypa.io/) — comparação de versões semânticas
 
 ## Limitações conhecidas
 
-- **Sem áudio** — apenas vídeo por enquanto
+- **Sem áudio** — apenas vídeo por enquanto (o seletor de bitrate de áudio na lobby é reservado para uma implementação futura)
 - **Um monitor por vez** — transmite o monitor principal (índice 1)
 - **Sem lista de salas** — é necessário saber o nome da sala para entrar
 - **Sem criptografia** — rede de confiança (pode adicionar TLS depois)

@@ -175,6 +175,9 @@ class UpdateDialog(QDialog):
 
     def _on_download_error(self, msg: str) -> None:
         self._progress.close()
+        if self._thread:
+            self._thread.quit()
+            self._thread.wait(2000)
         QMessageBox.warning(self, "Erro na Atualização", msg)
         self._update_btn.setEnabled(True)
         self._later_btn.setEnabled(True)

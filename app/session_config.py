@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from app.config import DEFAULT_FPS, DEFAULT_JPEG_QUALITY, DEFAULT_MAX_WIDTH
+from app.config import DEFAULT_MAX_WIDTH
 
 VIDEO_FPS_OPTIONS = (5, 15, 30, 60, 120)
 AUDIO_BITRATE_OPTIONS = (64, 96, 128, 192, 256, 320)
@@ -43,8 +43,6 @@ class SessionConfig:
     room_id: str
     manual_advertise_ip: str = ""
     seed_peers: list[str] = field(default_factory=list)
-    fps: int = DEFAULT_FPS
-    jpeg_quality: int = DEFAULT_JPEG_QUALITY
     max_width: int = DEFAULT_MAX_WIDTH
     monitor_index: int = 1
     native_size: tuple[int, int] | None = None
@@ -57,8 +55,6 @@ class SessionConfig:
         self.validate(self.native_size)
 
     def validate(self, native_size: tuple[int, int] | None = None) -> None:
-        if self.fps not in VIDEO_FPS_OPTIONS:
-            raise ValueError(f"fps must be one of {VIDEO_FPS_OPTIONS}")
         if self.video_fps not in VIDEO_FPS_OPTIONS:
             raise ValueError(f"video_fps must be one of {VIDEO_FPS_OPTIONS}")
         effective_native_size = native_size if native_size is not None else self.native_size
