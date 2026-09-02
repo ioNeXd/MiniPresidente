@@ -40,7 +40,8 @@ class DownloadWorker(QObject):
     def run(self) -> None:
         try:
             # Baixar para tempdir
-            dest = os.path.join(tempfile.gettempdir(), "MiniPresidente_update.exe")
+            fd, dest = tempfile.mkstemp(prefix=f"{os.getpid()}_", suffix="_MiniPresidente_update.exe")
+            os.close(fd)
 
             def on_progress(pct: int) -> None:
                 if not self._cancelled:
@@ -54,13 +55,11 @@ class DownloadWorker(QObject):
             if self._cancelled:
                 return
 
-            # Verificar hash
-            if self.hash_url:
-                logger.info("Verifying SHA-256 hash")
-                if not verify_hash(dest, self.hash_url):
-                    os.remove(dest)
-                    self.error.emit("Falha na verificação de integridade (SHA-256).")
-                    return
+            logger.info("Verifying SHA-256 hash")
+            if not verify_hash(dest, self.hash_url):
+                os.remove(dest)
+                self.error.emit("Falha na verificação de integridade (SHA-256).")
+                return
 
             logger.info("Download and verification complete")
             self.finished.emit(dest)

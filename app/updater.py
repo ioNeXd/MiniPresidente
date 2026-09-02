@@ -40,6 +40,16 @@ def is_frozen() -> bool:
     return getattr(sys, "frozen", False)
 
 
+def current_executable_path() -> str:
+    """Retorna o caminho do executável atual.
+
+    Fora do runtime frozen, o update é ignorado em check_for_updates(),
+    mas quando houver um update válido a rota de instalação continua usando
+    o executável atual via sys.executable.
+    """
+    return sys.executable
+
+
 def fetch_latest_release() -> Optional[dict]:
     """Busca a release mais recente no GitHub.
 
@@ -75,6 +85,9 @@ def fetch_latest_release() -> Optional[dict]:
 
     if not tag or not exe_url:
         logger.warning("Release data incomplete (tag=%s, exe=%s)", tag, exe_url)
+        return None
+    if not hash_url:
+        logger.warning("Release asset missing .exe.sha256; refusing update without integrity hash")
         return None
 
     return {
@@ -166,8 +179,8 @@ def verify_hash(file_path: str, hash_url: Optional[str]) -> bool:
 
 
 def create_update_script(new_exe_path: str, current_exe_path: str) -> str:
-    """Gera um .bat que substitui o executável atual (Windows only)."""
-    bat_content = f"""@echo off
+   """Gera um .bat que substitui o executável atual (Windows only)."""
+   bat_content = f"""@echo off
 timeout /t 2 /nobreak >nul
 copy /Y "{new_exe_path}" "{current_exe_path}"
 if %errorlevel% neq 0 (
@@ -177,28 +190,26 @@ if %errorlevel% neq 0 (
 )
 start "" "{current_exe_path}"
 """
-    bat_path = os.path.join(tempfile.gettempdir(), "MiniPresidente_update.bat")
-    with open(bat_path, "w", encoding="utf-8") as f:
-        f.write(bat_content)
-    return bat_path
+   bat_path = os.path.join(tempfile.gettempdir(), f"{os.getpid()}_MiniPresidente_update.bat")
+   with open(bat_path, "w", encoding="utf-8") as f:
+       f.write(bat_content)
+   return bat_path
 
 
 def install_update(new_exe_path: str) -> None:
-    """Executa o script de atualização e fecha o app."""
-    current_exe = sys.executable
-    bat_path = create_update_script(new_exe_path, current_exe)
-    logger.info("Launching update script: %s", bat_path)
+   """Executa o script de atualização e fecha o app."""
+   current_exe = current_executable_path()
+   bat_path = create_update_script(new_exe_path, current_exe)
+   logger.info("Launching update script: %s", bat_path)
 
-    # Flags detached no Windows para o .bat sobreviver ao fechamento do app
-    creation_flags = 0
-    if sys.platform == "win32":
-        creation_flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW
+   creation_flags = 0
+   if sys.platform == "win32":
+       creation_flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW
 
-    subprocess.Popen(
-        [bat_path],
-        shell=True,
-        creationflags=creation_flags if sys.platform == "win32" else 0,
-    )
+   subprocess.Popen(
+       ["cmd", "/c", bat_path],
+       creationflags=creation_flags if sys.platform == "win32" else 0,
+   )
 
 
 def check_for_updates(force: bool = False) -> Optional[dict]:

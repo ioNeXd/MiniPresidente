@@ -99,16 +99,16 @@ class LobbyWindow(QWidget):
             self.status_label.setText("Sala: apenas letras, números, _ ou -")
             return
 
-        # Salva IP manual e seed peers na config global
+        seed_peers = parse_seed_peers(seed_raw)
         app.config.MANUAL_ADVERTISE_IP = manual_ip
-        app.config.SEED_PEERS = parse_seed_peers(seed_raw)
+        app.config.SEED_PEERS = seed_peers
 
-        room_id = room_name.lower().replace(" ", "-")
+        room_id = room_name.lower()
 
         logger.info("User '%s' joining room '%s' (IP=%s, seeds=%s)",
-                     username, room_name, manual_ip, app.config.SEED_PEERS)
+                     username, room_name, manual_ip, seed_peers)
 
-        discovery = Discovery(username)
+        discovery = Discovery(username, manual_advertise_ip=manual_ip, seed_peers=seed_peers)
         discovery.set_room(room_id, room_name)
         discovery.start()
 

@@ -106,7 +106,7 @@ O programa verifica automaticamente novas versões via GitHub Releases:
 
 ### Criando a primeira release
 
-1. Atualize `__version__` em `app/config.py` e `version` em `pyproject.toml`
+1. Atualize `__version__` em `app/config.py` — o `pyproject.toml` lê esse valor dinamicamente
 2. Crie a tag: `git tag v0.2.0 && git push origin v0.2.0`
 3. Compile o exe: `pyinstaller MiniPresidente.spec`
 4. Gere o hash: `certutil -hashfile dist/MiniPresidente.exe SHA256 > dist/MiniPresidente.exe.sha256`

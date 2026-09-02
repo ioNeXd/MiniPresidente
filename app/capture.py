@@ -12,6 +12,8 @@ from __future__ import annotations
 import io
 import logging
 import threading
+import time
+from typing import Callable
 
 import mss
 import mss.base
@@ -36,6 +38,34 @@ def _get_sct() -> mss.base.MSSBase:
 def list_monitors() -> list[dict]:
     """Retorna a lista de monitores disponíveis (índice 0 = todos combinados)."""
     return list(_get_sct().monitors)
+
+
+def capture_loop(
+    running: Callable[[], bool],
+    fps: int,
+    on_frame: Callable[[bytes], None],
+    monitor_index: int,
+    quality: int,
+    max_width: int,
+    logger: logging.Logger,
+) -> None:
+    """Executa a captura periódica e entrega um frame válido ao callback.
+
+    O helper centraliza o timing, o tratamento de erro e o sleep do restante
+    do intervalo para que o mesmo padrão não seja duplicado em outros loops de
+    captura do projeto.
+    """
+    interval = 1.0 / max(1, fps)
+    while running():
+        start = time.time()
+        try:
+            frame = grab_jpeg(monitor_index, quality, max_width)
+            on_frame(frame)
+        except Exception:
+            logger.exception("Error capturing frame")
+        elapsed = time.time() - start
+        if elapsed < interval:
+            time.sleep(interval - elapsed)
 
 
 def grab_jpeg(monitor_index: int = 1, quality: int = 60, max_width: int = 1280) -> bytes:

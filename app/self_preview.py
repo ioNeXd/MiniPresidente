@@ -7,10 +7,9 @@ from __future__ import annotations
 # ─────────────────────────────────────────────────────────────────────────────
 import logging
 import threading
-import time
 from typing import Callable
 
-from app.capture import grab_jpeg
+from app.capture import capture_loop
 from app.config import DEFAULT_FPS, DEFAULT_JPEG_QUALITY, DEFAULT_MAX_WIDTH
 
 logger = logging.getLogger(__name__)
@@ -39,14 +38,12 @@ class SelfPreview:
         logger.info("SelfPreview stopped")
 
     def _run(self) -> None:
-        interval = 1.0 / max(1, self.fps)
-        while self._running:
-            start = time.time()
-            try:
-                frame = grab_jpeg(self.monitor_index, self.quality, self.max_width)
-                self.on_frame(frame)
-            except Exception:
-                logger.exception("Error capturing frame in SelfPreview")
-            elapsed = time.time() - start
-            if elapsed < interval:
-                time.sleep(interval - elapsed)
+        capture_loop(
+            running=lambda: self._running,
+            fps=self.fps,
+            on_frame=self.on_frame,
+            monitor_index=self.monitor_index,
+            quality=self.quality,
+            max_width=self.max_width,
+            logger=logger,
+        )

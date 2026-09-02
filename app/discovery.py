@@ -116,14 +116,18 @@ def detect_advertise_ip() -> str:
 class Discovery:
     """Gerencia descoberta de peers via broadcast UDP e unicast/gossip."""
 
-    def __init__(self, username: str):
+    def __init__(self, username: str, manual_advertise_ip: str = "", seed_peers: Optional[List[str]] = None):
         """Inicializa Discovery com socket UDP e estado compartilhado."""
+        from app import config as app_config
+
         self.user_id = str(uuid.uuid4())[:8]
         self.username = username
         self._room_id = ""
         self._room_name = ""
         self._transmitting = False
         self._stream_port = 0
+        self._manual_advertise_ip = manual_advertise_ip or app_config.MANUAL_ADVERTISE_IP
+        self._seed_peers = list(seed_peers) if seed_peers else list(app_config.SEED_PEERS)
 
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -139,6 +143,7 @@ class Discovery:
         self._lock = threading.Lock()
         self._running = False
         self._on_change: Optional[Callable[[], None]] = None
+        self._threads: list[threading.Thread] = []
 
     # ─── Propriedades com proteção de lock ──────────────────────────────
     @property
@@ -177,9 +182,13 @@ class Discovery:
     def start(self) -> None:
         """Inicia as threads de broadcast, escuta e reap."""
         self._running = True
-        threading.Thread(target=self._broadcast_loop, daemon=True).start()
-        threading.Thread(target=self._listen_loop, daemon=True).start()
-        threading.Thread(target=self._reap_loop, daemon=True).start()
+        self._threads = [
+            threading.Thread(target=self._broadcast_loop, daemon=True),
+            threading.Thread(target=self._listen_loop, daemon=True),
+            threading.Thread(target=self._reap_loop, daemon=True),
+        ]
+        for thread in self._threads:
+            thread.start()
         logger.info("Discovery started for user %s", self.username)
 
     def stop(self) -> None:
@@ -189,6 +198,8 @@ class Discovery:
             self._sock.close()
         except OSError:
             pass
+        for thread in self._threads:
+            thread.join(timeout=2.0)
         logger.info("Discovery stopped")
 
     def set_room(self, room_id: str, room_name: str) -> None:
@@ -205,8 +216,14 @@ class Discovery:
 
     # ─── Broadcast + unicast (gossip) ──────────────────────────────────
     def _broadcast_loop(self) -> None:
+        ip = self._manual_advertise_ip or detect_advertise_ip()
+        last_ip_check = time.monotonic()
+
         while self._running:
-            ip = detect_advertise_ip()
+            now = time.monotonic()
+            if now - last_ip_check >= 30.0:
+                ip = self._manual_advertise_ip or detect_advertise_ip()
+                last_ip_check = now
 
             with self._lock:
                 rid = self._room_id
@@ -240,13 +257,10 @@ class Discovery:
     def _unicast_to_known_peers(self, data: bytes, my_ip: str) -> None:
         """Envia o payload via unicast para seed peers + peers aprendidos (gossip).
         Evita enviar para o próprio IP."""
-        from app.config import SEED_PEERS
-
-        # Conjunto de destinos: seeds atuais + peers aprendidos via gossip
         with self._lock:
             peer_ips = {p.ip for p in self.peers.values() if p.ip != my_ip}
 
-        all_destinations = set(SEED_PEERS) | peer_ips
+        all_destinations = set(self._seed_peers) | peer_ips
         for dest_ip in all_destinations:
             if dest_ip == my_ip or not _is_valid_ipv4(dest_ip):
                 continue
@@ -309,25 +323,35 @@ def _parse_peer_msg(msg: dict) -> PeerInfo:
     - stream_port é inteiro positivo
     - Strings não excedem tamanhos razoáveis
     """
-    user_id = str(msg["user_id"])[:64]
-    username = str(msg["username"])[:64]
-    ip = str(msg["ip"])
-    room_id = str(msg["room_id"])[:128]
-    room_name = str(msg["room_name"])[:128]
-    transmitting = bool(msg["transmitting"])
-    stream_port = int(msg["stream_port"])
+    user_id = msg.get("user_id")
+    username = msg.get("username")
+    ip = msg.get("ip")
+    room_id = msg.get("room_id")
+    room_name = msg.get("room_name")
+    transmitting = msg.get("transmitting")
+    stream_port = msg.get("stream_port")
 
-    if not _is_valid_ipv4(ip):
+    if not isinstance(user_id, str) or not user_id:
+        raise ValueError("Invalid user_id")
+    if not isinstance(username, str) or not username:
+        raise ValueError("Invalid username")
+    if not isinstance(ip, str) or not _is_valid_ipv4(ip):
         raise ValueError(f"Invalid IP: {ip}")
-    if not (0 <= stream_port <= 65535):
+    if not isinstance(room_id, str) or not room_id:
+        raise ValueError("Invalid room_id")
+    if not isinstance(room_name, str) or not room_name:
+        raise ValueError("Invalid room_name")
+    if not isinstance(transmitting, bool):
+        raise ValueError("Invalid transmitting")
+    if not isinstance(stream_port, int) or not (1 <= stream_port <= 65535):
         raise ValueError(f"Invalid port: {stream_port}")
 
     return PeerInfo(
-        user_id=user_id,
-        username=username,
+        user_id=user_id[:64],
+        username=username[:64],
         ip=ip,
-        room_id=room_id,
-        room_name=room_name,
+        room_id=room_id[:128],
+        room_name=room_name[:128],
         transmitting=transmitting,
         stream_port=stream_port,
     )

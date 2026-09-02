@@ -1,13 +1,14 @@
 [build-system]
-requires = ["setuptools>=68.0", "wheel"]
+requires = ["setuptools>=77.0.3", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "minipresidente"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Compartilhamento de tela peer-to-peer para LAN/VPN"
 requires-python = ">=3.10"
-license = {text = "MIT"}  # PEP 639 string form requires setuptools>=77; text form works broadly
+license = "MIT"  # A forma SPDX exige setuptools>=77.0.3
+license-files = ["LICENSE"]
 dependencies = [
     "PySide6>=6.5",
     "mss>=9.0",
@@ -17,6 +18,9 @@ dependencies = [
 
 [project.scripts]
 minipresidente = "app.main:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "app.config.__version__"}
 
 [tool.setuptools.packages.find]
 include = ["app*"]

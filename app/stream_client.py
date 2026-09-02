@@ -10,6 +10,8 @@ import struct
 import threading
 from typing import Callable, Optional
 
+from app.config import MAX_FRAME_BYTES
+
 logger = logging.getLogger(__name__)
 
 
@@ -73,6 +75,9 @@ class StreamClient:
             if header is None:
                 break
             (size,) = struct.unpack(">I", header)
+            if size <= 0 or size > MAX_FRAME_BYTES:
+                logger.warning("Frame size %d out of bounds, dropping connection", size)
+                break
             data = self._recv_exact(size)
             if data is None:
                 break

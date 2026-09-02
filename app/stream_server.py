@@ -12,11 +12,10 @@ import logging
 import socket
 import struct
 import threading
-import time
 from typing import Optional
 
-from app.capture import grab_jpeg
-from app.config import DEFAULT_FPS, DEFAULT_JPEG_QUALITY, DEFAULT_MAX_WIDTH
+from app.capture import capture_loop
+from app.config import DEFAULT_FPS, DEFAULT_JPEG_QUALITY, DEFAULT_MAX_WIDTH, MAX_FRAME_BYTES
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +39,9 @@ class StreamServer:
 
         self._client_count = 0
         self._clients_lock = threading.Lock()
+        self._active_conns: set[socket.socket] = set()
+        self._capture_thread: Optional[threading.Thread] = None
+        self._accept_thread: Optional[threading.Thread] = None
 
     def start(self) -> int:
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -49,10 +51,10 @@ class StreamServer:
         self.port = self._sock.getsockname()[1]
         self._running = True
 
-        # Thread de captura: captura 1 frame e acorda todos os viewers
-        threading.Thread(target=self._capture_loop, daemon=True).start()
-        # Thread de aceitação de conexões
-        threading.Thread(target=self._accept_loop, daemon=True).start()
+        self._capture_thread = threading.Thread(target=self._capture_loop, daemon=True)
+        self._accept_thread = threading.Thread(target=self._accept_loop, daemon=True)
+        self._capture_thread.start()
+        self._accept_thread.start()
 
         logger.info("StreamServer started on port %d", self.port)
         return self.port
@@ -66,24 +68,41 @@ class StreamServer:
                 self._sock.close()
             except OSError:
                 pass
+        for conn in list(self._active_conns):
+            try:
+                conn.close()
+            except OSError:
+                pass
+        capture_thread = self._capture_thread
+        accept_thread = self._accept_thread
+        if capture_thread is not None:
+            capture_thread.join(timeout=2.0)
+        if accept_thread is not None:
+            accept_thread.join(timeout=2.0)
         logger.info("StreamServer stopped")
 
     def _capture_loop(self) -> None:
         """Captura 1 frame por intervalo e distribui para todos os viewers."""
-        interval = 1.0 / max(1, self.fps)
-        while self._running:
-            start = time.time()
-            try:
-                frame = grab_jpeg(self.monitor_index, self.quality, self.max_width)
-                with self._frame_lock:
-                    self._current_frame = frame
-                    self._frame_seq += 1
-                    self._frame_lock.notify_all()
-            except Exception:
-                logger.exception("Error capturing frame in StreamServer")
-            elapsed = time.time() - start
-            if elapsed < interval:
-                time.sleep(interval - elapsed)
+
+        def on_frame(frame: bytes) -> None:
+            if len(frame) > MAX_FRAME_BYTES:
+                logger.warning("Frame size %d exceeds allowed max (%d), skipping capture",
+                               len(frame), MAX_FRAME_BYTES)
+                return
+            with self._frame_lock:
+                self._current_frame = frame
+                self._frame_seq += 1
+                self._frame_lock.notify_all()
+
+        capture_loop(
+            running=lambda: self._running,
+            fps=self.fps,
+            on_frame=on_frame,
+            monitor_index=self.monitor_index,
+            quality=self.quality,
+            max_width=self.max_width,
+            logger=logger,
+        )
 
     def _accept_loop(self) -> None:
         while self._running:
@@ -99,6 +118,7 @@ class StreamServer:
     def _serve_client(self, conn: socket.socket) -> None:
         with self._clients_lock:
             self._client_count += 1
+            self._active_conns.add(conn)
         last_seq = 0
         try:
             while self._running:
@@ -121,6 +141,7 @@ class StreamServer:
         finally:
             with self._clients_lock:
                 self._client_count -= 1
+                self._active_conns.discard(conn)
             try:
                 conn.close()
             except OSError:

@@ -3,7 +3,7 @@ from __future__ import annotations
 # ─── config.py ─────────────────────────────────────────────────────────────
 # Constantes centrais do MiniPresidente.
 # ─────────────────────────────────────────────────────────────────────────────
-# ATENÇÃO: sincronizar manualmente com pyproject.toml [project].version
+# Fonte única de versão — pyproject.toml lê este valor via dynamic version.
 __version__ = "0.1.0"
 
 # ─── Discovery (UDP broadcast) ────────────────────────────────────────────
@@ -15,6 +15,7 @@ PEER_TIMEOUT_S = 5.0         # tempo sem anúncio até considerar o peer offline
 DEFAULT_FPS = 15             # fps de cada stream (suba com cautela)
 DEFAULT_JPEG_QUALITY = 60    # 1-95, mais alto = melhor qualidade / mais banda
 DEFAULT_MAX_WIDTH = 1280     # downscale do frame antes de enviar (poupa banda/CPU)
+MAX_FRAME_BYTES = 16 * 1024 * 1024  # limite defensivo para JPEG em 1280px/60; evita payloads gigantes
 
 # ─── UI ───────────────────────────────────────────────────────────────────
 GRID_COLUMNS = 2             # colunas no grid de telas da sala
@@ -43,6 +44,8 @@ def validate_config() -> None:
         raise ValueError(f"DEFAULT_JPEG_QUALITY must be 1-95, got {DEFAULT_JPEG_QUALITY}")
     if DEFAULT_MAX_WIDTH < 100:
         raise ValueError(f"DEFAULT_MAX_WIDTH must be >= 100, got {DEFAULT_MAX_WIDTH}")
+    if MAX_FRAME_BYTES < 1:
+        raise ValueError(f"MAX_FRAME_BYTES must be >= 1, got {MAX_FRAME_BYTES}")
     if GRID_COLUMNS < 1:
         raise ValueError(f"GRID_COLUMNS must be >= 1, got {GRID_COLUMNS}")
 
