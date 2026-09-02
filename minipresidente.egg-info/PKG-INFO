@@ -1,0 +1,12 @@
+Metadata-Version: 2.4
+Name: minipresidente
+Version: 0.1.0
+Summary: Compartilhamento de tela peer-to-peer para LAN/VPN
+License-Expression: MIT
+Requires-Python: >=3.10
+License-File: LICENSE
+Requires-Dist: PySide6>=6.5
+Requires-Dist: mss>=9.0
+Requires-Dist: Pillow>=10.0
+Requires-Dist: packaging>=23.0
+Dynamic: license-file

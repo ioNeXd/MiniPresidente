@@ -1,0 +1,2 @@
+[console_scripts]
+minipresidente = app.main:main
