@@ -216,7 +216,10 @@ def install_update(new_exe_path: str) -> None:
 
    creation_flags = 0
    if sys.platform == "win32":
-       creation_flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW
+       creation_flags = (
+           getattr(subprocess, "DETACHED_PROCESS", 0)
+           | getattr(subprocess, "CREATE_NO_WINDOW", 0)
+       )
 
    subprocess.Popen(
        ["cmd", "/c", bat_path],
