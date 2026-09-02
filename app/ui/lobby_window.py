@@ -2,7 +2,9 @@ from __future__ import annotations
 
 # app/ui/lobby_window.py
 import logging
+import os
 import re
+import sys
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
@@ -185,6 +187,10 @@ class LobbyWindow(QWidget):
 
     @staticmethod
     def _detect_native_size() -> tuple[int, int]:
+        if sys.platform.startswith("linux") and not (
+            os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY")
+        ):
+            return (1920, 1080)
         try:
             monitor = list_monitors()[1]
             return monitor["width"], monitor["height"]
