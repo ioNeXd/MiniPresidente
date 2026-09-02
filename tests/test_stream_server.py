@@ -1,97 +1,121 @@
-"""Testes do fan-out do StreamServer em nível de socket TCP."""
+"""Testes do transporte H.264 do StreamServer em socket TCP."""
 
 import socket
 import struct
 import time
+from threading import Event
 
-import pytest
-
-import app.capture as capture_mod
 from app.session_config import SessionConfig
-from app.stream_server import StreamServer
-
-
-@pytest.fixture
-def synthetic_jpeg(monkeypatch):
-    """Substitui a captura real de tela por um JPEG sintético e estável."""
-    jpeg = b"\xff\xd8\xff\xe0" + b"\x00" * 64
-    monkeypatch.setattr(capture_mod, "grab_jpeg", lambda *args, **kwargs: jpeg)
-    return jpeg
+from app.stream_client import StreamClient
+from app.stream_server import HANDSHAKE_FORMAT, HANDSHAKE_SIZE, StreamServer
+from app.video_codec import H264Decoder
 
 
 def _recv_exact(sock: socket.socket, size: int, timeout: float = 5.0) -> bytes:
-    """Lê exatamente `size` bytes de um socket, sem deixar o teste travar."""
     sock.settimeout(timeout)
-    chunks: list[bytes] = []
-    remaining = size
-    while remaining > 0:
-        chunk = sock.recv(remaining)
+    data = bytearray()
+    while len(data) < size:
+        chunk = sock.recv(size - len(data))
         if not chunk:
             raise RuntimeError("socket closed before all data was received")
-        chunks.append(chunk)
-        remaining -= len(chunk)
-    return b"".join(chunks)
+        data.extend(chunk)
+    return bytes(data)
 
 
-def _read_one_frame(sock: socket.socket, timeout: float = 5.0) -> bytes:
-    """Lê um frame completo, incluindo header big-endian + payload JPEG."""
-    sock.settimeout(timeout)
-    header = _recv_exact(sock, 4, timeout=timeout)
-    payload_size = struct.unpack(">I", header)[0]
-    payload = _recv_exact(sock, payload_size, timeout=timeout)
-    return payload
+def _read_packet(sock: socket.socket) -> bytes:
+    size = struct.unpack(">I", _recv_exact(sock, 4))[0]
+    return _recv_exact(sock, size)
 
 
-def test_single_viewer_receives_frame(synthetic_jpeg):
-    """Um viewer isolado deve receber o último frame capturado."""
-    server = StreamServer(SessionConfig("", "", "", fps=30))
+def _capture_factory(width: int, height: int):
+    index = 0
+
+    def capture(_monitor: int, _max_width: int) -> tuple[bytes, int, int]:
+        nonlocal index
+        value = index % 256
+        index += 1
+        return bytes((value, 80, 180)) * (width * height), width, height
+
+    return capture
+
+
+def _start_server():
+    config = SessionConfig("", "", "", fps=30, video_bitrate_kbps=500)
+    server = StreamServer(config, capture_fn=_capture_factory(64, 48))
     server.start()
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(5.0)
+    return server
+
+
+def test_viewer_receives_h264_handshake_and_frame():
+    server = _start_server()
+    sock = socket.create_connection(("127.0.0.1", server.port), timeout=5)
     try:
-        sock.connect(("127.0.0.1", server.port))
-        frame = _read_one_frame(sock, timeout=5.0)
-        assert frame == synthetic_jpeg
+        handshake = _read_packet(sock)
+        magic, width, height, fps = struct.unpack(HANDSHAKE_FORMAT, handshake)
+        assert len(handshake) == HANDSHAKE_SIZE
+        assert magic == b"MPH264"
+        assert (width, height, fps) == (64, 48, 30)
+        decoder = H264Decoder()
+        decoded = []
+        deadline = time.monotonic() + 5
+        while not decoded and time.monotonic() < deadline:
+            try:
+                decoded.extend(decoder.decode_packet(_read_packet(sock)))
+            except Exception:
+                continue
+        assert decoded
+        assert len(decoded[0]) == width * height * 3
     finally:
         sock.close()
         server.stop()
 
 
-def test_multiple_viewers_receive_frames(synthetic_jpeg):
-    """Cada viewer deve receber ao menos um frame completo sem roubar o do outro."""
-    server = StreamServer(SessionConfig("", "", "", fps=30))
-    server.start()
-    clients: list[socket.socket] = []
+def test_real_stream_client_round_trip():
+    server = _start_server()
+    received: list[tuple[bytes, int, int]] = []
+    frame_ready = Event()
+
+    def on_frame(data: bytes, width: int, height: int) -> None:
+        received.append((data, width, height))
+        frame_ready.set()
+
+    client = StreamClient("127.0.0.1", server.port, on_frame)
+    client.start()
     try:
-        for _ in range(3):
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.settimeout(5.0)
-            sock.connect(("127.0.0.1", server.port))
-            clients.append(sock)
+        assert frame_ready.wait(5)
+        assert received[0][1:] == (64, 48)
+        assert len(received[0][0]) == 64 * 48 * 3
+    finally:
+        client.stop()
+        server.stop()
 
-        received = []
+
+def test_multiple_viewers_receive_ordered_packets():
+    server = _start_server()
+    clients = [socket.create_connection(("127.0.0.1", server.port), timeout=5) for _ in range(3)]
+    try:
         for sock in clients:
-            frame = _read_one_frame(sock, timeout=5.0)
-            received.append(frame)
-
-        assert len(received) == 3
-        assert all(frame == synthetic_jpeg for frame in received)
+            assert _read_packet(sock).startswith(b"MPH264")
+            assert _read_packet(sock)
     finally:
         for sock in clients:
             sock.close()
         server.stop()
 
 
-def test_stop_unblocks_viewers(synthetic_jpeg):
-    """stop() deve liberar a espera de viewers e encerrar o serviço sem travar."""
-    server = StreamServer(SessionConfig("", "", "", fps=30))
+def test_server_accepts_injected_capture():
+    width, height = 64, 48
+    server = StreamServer(
+        SessionConfig("", "", "", fps=30, video_bitrate_kbps=500),
+        capture_fn=_capture_factory(width, height),
+    )
     server.start()
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sock.settimeout(5.0)
     try:
-        sock.connect(("127.0.0.1", server.port))
-        _read_one_frame(sock, timeout=5.0)
-        server.stop()
-        time.sleep(0.2)
+        sock = socket.create_connection(("127.0.0.1", server.port), timeout=5)
+        try:
+            handshake = _read_packet(sock)
+            assert struct.unpack(HANDSHAKE_FORMAT, handshake)[1:3] == (width, height)
+        finally:
+            sock.close()
     finally:
-        sock.close()
+        server.stop()

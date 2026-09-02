@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 class RoomSession(QObject):
     """Orquestra discovery, transmissão e viewers de uma sala."""
 
-    frame_ready = Signal(str, bytes)
+    frame_ready = Signal(str, bytes, int, int)
     peer_disconnected = Signal(str)
     peer_list_changed = Signal(list)
     transmission_changed = Signal(bool)
@@ -50,8 +50,8 @@ class RoomSession(QObject):
         self.peer_list_changed.emit(peers)
 
     def _start_watching(self, peer: PeerInfo) -> None:
-        def on_frame(data: bytes, user_id: str = peer.user_id) -> None:
-            self.frame_ready.emit(user_id, data)
+        def on_frame(data: bytes, width: int, height: int, user_id: str = peer.user_id) -> None:
+            self.frame_ready.emit(user_id, data, width, height)
 
         def on_disconnect(user_id: str = peer.user_id) -> None:
             self.clients.pop(user_id, None)

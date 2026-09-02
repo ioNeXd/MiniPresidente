@@ -68,8 +68,8 @@ class VideoTile(QWidget):
         layout.addWidget(self.image_label)
         layout.addWidget(self.title_label)
 
-    def set_frame(self, jpeg_bytes: bytes) -> None:
-        img = QImage.fromData(jpeg_bytes, b"JPEG")
+    def set_frame(self, rgb_bytes: bytes, width: int, height: int) -> None:
+        img = QImage(rgb_bytes, width, height, QImage.Format.Format_RGB888).copy()
         if img.isNull():
             return
         pixmap = QPixmap.fromImage(img).scaled(
@@ -164,10 +164,10 @@ class RoomWindow(QMainWindow):
         for index, tile in enumerate(self.tiles.values()):
             self.grid.addWidget(tile, index // GRID_COLUMNS, index % GRID_COLUMNS)
 
-    def _on_frame_ready(self, user_id: str, data: bytes) -> None:
+    def _on_frame_ready(self, user_id: str, data: bytes, width: int, height: int) -> None:
         tile = self.tiles.get(user_id)
         if tile:
-            tile.set_frame(data)
+            tile.set_frame(data, width, height)
 
     def _update_transmit_button(self, transmitting: bool) -> None:
         if transmitting:

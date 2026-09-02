@@ -16,3 +16,4 @@ class SessionConfig:
     jpeg_quality: int = DEFAULT_JPEG_QUALITY
     max_width: int = DEFAULT_MAX_WIDTH
     monitor_index: int = 1
+    video_bitrate_kbps: int = 5000

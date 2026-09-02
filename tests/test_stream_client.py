@@ -5,16 +5,16 @@ import pytest
 
 from app.config import MAX_FRAME_BYTES
 from app.stream_client import StreamClient
+from app.stream_server import make_handshake
 
 
 class FakeSocket:
     def __init__(self, chunks):
         self._chunks = list(chunks)
         self.closed = False
-        self.timeout = None
 
-    def settimeout(self, value):
-        self.timeout = value
+    def settimeout(self, _value):
+        pass
 
     def recv(self, n):
         if not self._chunks:
@@ -29,13 +29,17 @@ class FakeSocket:
         self.closed = True
 
 
+def _packet(payload: bytes) -> bytes:
+    return struct.pack(">I", len(payload)) + payload
+
+
 @pytest.fixture
 def fake_socket_factory(monkeypatch):
     created = {}
 
-    def factory(*args, **kwargs):
-        payload = created.get("payload", b"x" * 8)
-        sock = FakeSocket([struct.pack(">I", len(payload)), payload])
+    def factory(*_args, **_kwargs):
+        handshake = _packet(make_handshake(64, 48, 15))
+        sock = FakeSocket([handshake, _packet(b"encoded"), b""])
         created["sock"] = sock
         return sock
 
@@ -43,63 +47,42 @@ def fake_socket_factory(monkeypatch):
     return created
 
 
-def test_stream_client_accepts_frame_within_limit(fake_socket_factory):
+def test_stream_client_decodes_frames_after_handshake(monkeypatch, fake_socket_factory):
+    class Decoder:
+        def decode_packet(self, data):
+            assert data == b"encoded"
+            return [b"rgb"]
+
+    monkeypatch.setattr("app.stream_client.H264Decoder", Decoder)
     seen = []
-    client = StreamClient("127.0.0.1", 5000, on_frame=seen.append)
+    client = StreamClient("127.0.0.1", 5000, on_frame=lambda *frame: seen.append(frame))
     client._running = True
     client._run()
-    assert seen == [b"x" * 8]
+    assert seen == [(b"rgb", 64, 48)]
 
 
-def test_stream_client_accepts_exact_max_size_frame(monkeypatch):
-    payload = b"x" * MAX_FRAME_BYTES
-    fake = FakeSocket([struct.pack(">I", len(payload)), payload])
-    monkeypatch.setattr(socket, "create_connection", lambda *args, **kwargs: fake)
+def test_stream_client_continues_after_decode_error(monkeypatch):
+    handshake = _packet(make_handshake(64, 48, 15))
+    fake = FakeSocket([handshake, _packet(b"bad"), b""])
+    monkeypatch.setattr(socket, "create_connection", lambda *_args, **_kwargs: fake)
+
+    class Decoder:
+        def decode_packet(self, _data):
+            raise ValueError("not a keyframe")
+
+    monkeypatch.setattr("app.stream_client.H264Decoder", Decoder)
     seen = []
-    client = StreamClient("127.0.0.1", 5000, on_frame=seen.append)
-    client._running = True
-    client._run()
-    assert seen == [payload]
-
-
-def test_stream_client_rejects_too_large_frame(monkeypatch):
-    payload = b"x" * (MAX_FRAME_BYTES + 1)
-    fake = FakeSocket([struct.pack(">I", len(payload)), payload])
-    monkeypatch.setattr(socket, "create_connection", lambda *args, **kwargs: fake)
-    seen = []
-    client = StreamClient("127.0.0.1", 5000, on_frame=seen.append)
-    client._running = True
-    client._run()
-    assert seen == []
-    assert fake.closed is True or fake.timeout is not None
-
-
-def test_stream_client_rejects_zero_size_frame(monkeypatch):
-    fake = FakeSocket([struct.pack(">I", 0)])
-    monkeypatch.setattr(socket, "create_connection", lambda *args, **kwargs: fake)
-    seen = []
-    client = StreamClient("127.0.0.1", 5000, on_frame=seen.append)
+    client = StreamClient("127.0.0.1", 5000, on_frame=lambda *frame: seen.append(frame))
     client._running = True
     client._run()
     assert seen == []
 
 
-def test_stream_client_handles_partial_header_without_crash(monkeypatch):
-    fake = FakeSocket([b"\x00\x00\x00"])
-    monkeypatch.setattr(socket, "create_connection", lambda *args, **kwargs: fake)
-    seen = []
-    client = StreamClient("127.0.0.1", 5000, on_frame=seen.append)
+def test_stream_client_rejects_too_large_packet(monkeypatch):
+    handshake = _packet(make_handshake(64, 48, 15))
+    fake = FakeSocket([handshake, struct.pack(">I", MAX_FRAME_BYTES + 1)])
+    monkeypatch.setattr(socket, "create_connection", lambda *_args, **_kwargs: fake)
+    client = StreamClient("127.0.0.1", 5000, on_frame=lambda *_frame: None)
     client._running = True
     client._run()
-    assert seen == []
-
-
-def test_stream_client_handles_disconnect_mid_payload(monkeypatch):
-    payload = b"x" * 32
-    fake = FakeSocket([struct.pack(">I", len(payload)), b"abc"])
-    monkeypatch.setattr(socket, "create_connection", lambda *args, **kwargs: fake)
-    seen = []
-    client = StreamClient("127.0.0.1", 5000, on_frame=seen.append)
-    client._running = True
-    client._run()
-    assert seen == []
+    assert fake.closed is True

@@ -90,3 +90,24 @@ def grab_jpeg(monitor_index: int = 1, quality: int = 60, max_width: int = 1280) 
     buf = io.BytesIO()
     img.save(buf, format="JPEG", quality=quality)
     return buf.getvalue()
+
+
+def grab_rgb(monitor_index: int, max_width: int) -> tuple[bytes, int, int]:
+    """Captura um monitor e retorna RGB cru, largura e altura pares."""
+    sct = _get_sct()
+    monitors = sct.monitors
+    idx = monitor_index if 0 < monitor_index < len(monitors) else 1
+    raw = sct.grab(monitors[idx])
+    img = Image.frombytes("RGB", raw.size, raw.rgb, "raw", "RGB")
+
+    if img.width > max_width:
+        ratio = max_width / img.width
+        img = img.resize((max_width, max(1, int(img.height * ratio))))
+
+    width = img.width - img.width % 2
+    height = img.height - img.height % 2
+    if width < 2 or height < 2:
+        raise ValueError("Captured monitor is too small for H.264")
+    if (width, height) != img.size:
+        img = img.crop((0, 0, width, height))
+    return img.tobytes(), width, height
