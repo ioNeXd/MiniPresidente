@@ -76,7 +76,10 @@ class LobbyWindow(QWidget):
         self.room_window = None
 
     def _enter_room(self) -> None:
-        """Valida inputs e abre a janela da sala."""
+        """
+        Valida os campos de entrada, configura a descoberta e abre a janela da sala.
+        Salva IP manual e seed peers na configuração global.
+        """
         username = self.name_input.text().strip()
         room_name = self.room_input.text().strip()
         manual_ip = self.ip_input.text().strip()
