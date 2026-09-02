@@ -7,7 +7,7 @@ name = "minipresidente"
 version = "0.1.0"
 description = "Compartilhamento de tela peer-to-peer para LAN/VPN"
 requires-python = ">=3.10"
-license = "MIT"
+license = {text = "MIT"}  # PEP 639 string form requires setuptools>=77; text form works broadly
 dependencies = [
     "PySide6>=6.5",
     "mss>=9.0",

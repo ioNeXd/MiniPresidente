@@ -35,8 +35,8 @@ class StreamServer:
 
         # Frame compartilhado: um capture por intervalo, distribuído a todos
         self._current_frame: Optional[bytes] = None
-        self._frame_event = threading.Event()
-        self._frame_lock = threading.Lock()
+        self._frame_lock = threading.Condition()
+        self._frame_seq: int = 0
 
         self._client_count = 0
         self._clients_lock = threading.Lock()
@@ -59,7 +59,8 @@ class StreamServer:
 
     def stop(self) -> None:
         self._running = False
-        self._frame_event.set()  # Desperta threads bloqueadas
+        with self._frame_lock:
+            self._frame_lock.notify_all()  # Desperta threads bloqueadas
         if self._sock:
             try:
                 self._sock.close()
@@ -76,7 +77,8 @@ class StreamServer:
                 frame = grab_jpeg(self.monitor_index, self.quality, self.max_width)
                 with self._frame_lock:
                     self._current_frame = frame
-                self._frame_event.set()  # Acorda todos os viewers
+                    self._frame_seq += 1
+                    self._frame_lock.notify_all()
             except Exception:
                 logger.exception("Error capturing frame in StreamServer")
             elapsed = time.time() - start
@@ -94,18 +96,19 @@ class StreamServer:
     def _serve_client(self, conn: socket.socket) -> None:
         with self._clients_lock:
             self._client_count += 1
+        last_seq = 0
         try:
             while self._running:
-                self._frame_event.wait(timeout=2.0)
-                if not self._running:
-                    break
-                self._frame_event.clear()
-
                 with self._frame_lock:
+                    # Espera até que um novo frame esteja disponível
+                    while self._frame_seq == last_seq and self._running:
+                        self._frame_lock.wait(timeout=2.0)
+                    if not self._running:
+                        break
                     frame = self._current_frame
+                    last_seq = self._frame_seq
                 if frame is None:
                     continue
-
                 header = struct.pack(">I", len(frame))
                 try:
                     conn.sendall(header + frame)
@@ -120,7 +123,4 @@ class StreamServer:
             except OSError:
                 pass
 
-    @property
-    def viewer_count(self) -> int:
-        with self._clients_lock:
-            return self._client_count
+

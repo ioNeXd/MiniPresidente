@@ -4,7 +4,7 @@ from __future__ import annotations
 import logging
 from typing import Dict, Optional
 
-from PySide6.QtCore import QObject, Qt, QTimer, Signal
+from PySide6.QtCore import QObject, Qt, QThread, QTimer, Signal
 from PySide6.QtGui import QImage, QPixmap
 from PySide6.QtWidgets import (
     QGridLayout,
@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QListWidget,
     QMainWindow,
+    QMessageBox,
     QPushButton,
     QVBoxLayout,
     QWidget,
@@ -22,6 +23,8 @@ from app.discovery import Discovery, PeerInfo
 from app.self_preview import SelfPreview
 from app.stream_client import StreamClient
 from app.stream_server import StreamServer
+from app.ui.update_dialog import UpdateDialog
+from app.updater import check_for_updates, is_frozen
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +52,6 @@ class _ManualUpdateWorker(QObject):
     finished_signal = Signal()
 
     def run(self) -> None:
-        from app.updater import check_for_updates
         try:
             info = check_for_updates(force=True)
         except Exception:
@@ -59,6 +61,8 @@ class _ManualUpdateWorker(QObject):
 
 
 class VideoTile(QWidget):
+    """Tile individual que exibe o frame JPEG de um peer."""
+
     def __init__(self, title: str):
         super().__init__()
         layout = QVBoxLayout(self)
@@ -94,6 +98,8 @@ def _sanitize_display_name(name: str) -> str:
 
 
 class RoomWindow(QMainWindow):
+    """Janela principal da sala: grid de telas, lista de membros e controles."""
+
     def __init__(self, discovery: Discovery, room_name: str, username: str):
         super().__init__()
         self.discovery = discovery
@@ -118,6 +124,7 @@ class RoomWindow(QMainWindow):
         self.timer.start(1000)
 
     def _build_ui(self) -> None:
+        """Monta o layout principal da janela."""
         central = QWidget()
         self.setCentralWidget(central)
         main_layout = QHBoxLayout(central)
@@ -152,6 +159,7 @@ class RoomWindow(QMainWindow):
         main_layout.addWidget(right, stretch=1)
 
     def _refresh_peers(self) -> None:
+        """Atualiza lista de membros e conecta/desconecta viewers."""
         peers = [p for p in self.discovery.get_peers() if p.room_id == self.discovery.room_id]
 
         self.member_list.clear()
@@ -173,6 +181,7 @@ class RoomWindow(QMainWindow):
                 self._stop_watching(uid)
 
     def _start_watching(self, peer: PeerInfo) -> None:
+        """Conecta a um peer transmissor e exibe seus frames."""
         tile = VideoTile(_sanitize_display_name(peer.username))
         self.tiles[peer.user_id] = tile
         self._relayout_grid()
@@ -258,9 +267,6 @@ class RoomWindow(QMainWindow):
         self._update_in_progress = True
         self.update_btn.setEnabled(False)
 
-        from PySide6.QtCore import QThread
-
-
         self._update_thread = QThread(self)
         self._update_worker = _ManualUpdateWorker()
         self._update_worker.moveToThread(self._update_thread)
@@ -271,21 +277,26 @@ class RoomWindow(QMainWindow):
         self._update_thread.start()
 
     def _on_update_check_result(self, release_info) -> None:
+        """Exibe o resultado da verificação de atualização."""
         self._update_in_progress = False
         self.update_btn.setEnabled(True)
 
         if release_info is None:
-            from PySide6.QtWidgets import QMessageBox
-            QMessageBox.information(
-                self, "Verificação de Atualização",
-                f"Você já está na versão mais recente (v{__version__}).")
+            if not is_frozen():
+                QMessageBox.information(
+                    self, "Verificação de Atualização",
+                    "Atualização automática indisponível em modo de desenvolvimento.")
+            else:
+                QMessageBox.information(
+                    self, "Verificação de Atualização",
+                    f"Você já está na versão mais recente (v{__version__}).")
             return
 
-        from app.ui.update_dialog import UpdateDialog
         dialog = UpdateDialog(release_info, parent=self)
         dialog.exec()
 
     def closeEvent(self, event) -> None:
+        """Para todas as threads e recursos antes de fechar."""
         self.timer.stop()
         if self.stream_server:
             self.stream_server.stop()
@@ -293,6 +304,10 @@ class RoomWindow(QMainWindow):
             self.self_preview.stop()
         for client in self.clients.values():
             client.stop()
+        # Finaliza thread de verificação de updates se estiver rodando
+        if getattr(self, "_update_thread", None) and self._update_thread.isRunning():
+            self._update_thread.quit()
+            self._update_thread.wait()
         self.discovery.set_transmitting(False)
         self.discovery.stop()
         super().closeEvent(event)

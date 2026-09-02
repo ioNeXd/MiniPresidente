@@ -20,6 +20,8 @@ _MAX_ROOM_LENGTH = 64
 
 
 class LobbyWindow(QWidget):
+    """Tela inicial: entrada de nome, sala, IP anunciado e seed peers."""
+
     def __init__(self):
         super().__init__()
         self.setWindowTitle(f"MiniPresidente v{__version__}")
@@ -74,6 +76,7 @@ class LobbyWindow(QWidget):
         self.room_window = None
 
     def _enter_room(self) -> None:
+        """Valida inputs e abre a janela da sala."""
         username = self.name_input.text().strip()
         room_name = self.room_input.text().strip()
         manual_ip = self.ip_input.text().strip()

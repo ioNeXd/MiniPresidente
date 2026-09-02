@@ -194,6 +194,3 @@ class UpdateDialog(QDialog):
         add_ignored_version(self._release["version"])
         self.accept()
 
-    def get_choice(self) -> str:
-        """Retorna 'update', 'later' ou 'never'."""
-        return self._choice

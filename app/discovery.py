@@ -114,7 +114,10 @@ def detect_advertise_ip() -> str:
 
 
 class Discovery:
+    """Gerencia descoberta de peers via broadcast UDP e unicast/gossip."""
+
     def __init__(self, username: str):
+        """Inicializa Discovery com socket UDP e estado compartilhado."""
         self.user_id = str(uuid.uuid4())[:8]
         self.username = username
         self._room_id = ""
@@ -172,6 +175,7 @@ class Discovery:
         self._on_change = cb
 
     def start(self) -> None:
+        """Inicia as threads de broadcast, escuta e reap."""
         self._running = True
         threading.Thread(target=self._broadcast_loop, daemon=True).start()
         threading.Thread(target=self._listen_loop, daemon=True).start()
@@ -179,6 +183,7 @@ class Discovery:
         logger.info("Discovery started for user %s", self.username)
 
     def stop(self) -> None:
+        """Para todas as threads e fecha o socket."""
         self._running = False
         try:
             self._sock.close()
@@ -187,17 +192,16 @@ class Discovery:
         logger.info("Discovery stopped")
 
     def set_room(self, room_id: str, room_name: str) -> None:
-        self._room_id = room_id
-        self._room_name = room_name
+        """Define a sala atual (thread-safe)."""
+        with self._lock:
+            self._room_id = room_id
+            self._room_name = room_name
 
     def set_transmitting(self, on: bool, stream_port: int = 0) -> None:
-        self._transmitting = on
-        self._stream_port = stream_port
-
-    @property
-    def advertised_ip(self) -> str:
-        """IP que este peer anuncia. Atualizado a cada ciclo de broadcast."""
-        return detect_advertise_ip()
+        """Define o estado de transmissão e a porta do stream (thread-safe)."""
+        with self._lock:
+            self._transmitting = on
+            self._stream_port = stream_port
 
     # ─── Broadcast + unicast (gossip) ──────────────────────────────────
     def _broadcast_loop(self) -> None:
@@ -235,7 +239,7 @@ class Discovery:
 
     def _unicast_to_known_peers(self, data: bytes, my_ip: str) -> None:
         """Envia o payload via unicast para seed peers + peers aprendidos (gossip).
-        Evia enviar para o próprio IP."""
+        Evita enviar para o próprio IP."""
         from app.config import SEED_PEERS
 
         # Conjunto de destinos: seeds atuais + peers aprendidos via gossip

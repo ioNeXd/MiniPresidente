@@ -42,14 +42,20 @@ Cada amigo roda o mesmo comando na própria máquina. Digite o mesmo **nome de s
 
 ## Executável (.exe)
 
-Para quem não tem Python instalado:
+Para quem não tem Python instalado, a forma canônica de compilar é:
 
 ```bash
 pip install pyinstaller
-pyinstaller --onefile --windowed --name="MiniPresidente" --hidden-import=PySide6.QtSvg app/main.py
+pyinstaller MiniPresidente.spec
 ```
 
-O executável fica em `dist/MiniPresidente.exe`.
+Isso garante nome de saída e `hidden-imports` consistentes. O executável fica em `dist/MiniPresidente.exe`.
+
+Alternativa via linha de comando:
+
+```bash
+pyinstaller --onefile --windowed --name="MiniPresidente" --hidden-import=PySide6.QtSvg app/main.py
+```
 
 ## Descoberta de peers
 
@@ -81,6 +87,8 @@ Edite `app/config.py` para ajustar:
 | `DEFAULT_MAX_WIDTH` | `1280` | Resolução máxima (downscale automático) |
 | `GRID_COLUMNS` | `2` | Colunas no grid de telas da sala |
 | `DISCOVERY_PORT` | `47001` | Porta UDP para descoberta de peers |
+| `BROADCAST_INTERVAL_S` | `1.5` | Intervalo entre anúncios de presença (segundos) |
+| `PEER_TIMEOUT_S` | `5.0` | Tempo sem anúncio até considerar peer offline (segundos) |
 | `MANUAL_ADVERTISE_IP` | `""` | IP manual para anúncio (override automático) |
 | `SEED_PEERS` | `[]` | IPs de peers para discovery via VPN |
 
