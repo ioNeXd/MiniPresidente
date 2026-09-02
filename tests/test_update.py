@@ -61,7 +61,10 @@ def test_should_check_today_old_check():
 def test_should_check_today_corrupted():
     """Last_check corrompido, deve retornar True."""
     with patch("app.update_state.load_state", return_value={"last_check": "not-a-date"}):
-        assert should_check_today() is True# ─── update_state persistence ────────────────────────────────────────────
+        assert should_check_today() is True
+
+
+# ─── update_state persistence ────────────────────────────────────────────
 def test_state_persistence_roundtrip(tmp_path):
     """save/load deve preservar dados (usa diretório temporário)."""
     fake_path = tmp_path / "update_state.json"
@@ -136,7 +139,10 @@ def test_verify_hash_mismatch():
 def test_verify_hash_no_hash_url():
     """Sem hash_url, deve retornar False."""
     assert verify_hash("/nonexistent", "") is False
-    assert verify_hash("/nonexistent", None) is False# ─── fetch_latest_release parsing ────────────────────────────────────────
+    assert verify_hash("/nonexistent", None) is False
+
+
+# ─── fetch_latest_release parsing ────────────────────────────────────────
 def test_fetch_release_parsing():
     """Chama fetch_latest_release() com urlopen mockado e valida o parsing real."""
     import json

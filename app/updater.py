@@ -121,7 +121,7 @@ def download_file(url: str, dest_path: str, progress_callback=None) -> bool:
         return False
 
 
-def verify_hash(file_path: str, hash_url: str) -> bool:
+def verify_hash(file_path: str, hash_url: Optional[str]) -> bool:
     """Verifica SHA-256 do arquivo contra o hash baixado.
 
     Formato esperado do .sha256: <hash>  <nome_do_arquivo>
