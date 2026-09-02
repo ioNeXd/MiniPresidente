@@ -69,26 +69,26 @@ class VideoTile(QWidget):
         layout.setContentsMargins(4, 4, 4, 4)
 
         self.image_label = QLabel("Conectando...")
-        self.image_label.setAlignment(Qt.AlignCenter)
+        self.image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.image_label.setMinimumSize(320, 180)
         self.image_label.setStyleSheet(
             "QLabel { background:#111; color:#888; border:1px solid #333; "
             "border-radius:6px; font-size:12px; }")
 
         self.title_label = QLabel(title)
-        self.title_label.setAlignment(Qt.AlignCenter)
+        self.title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.title_label.setStyleSheet("QLabel { color:#ddd; font-size:11px; }")
 
         layout.addWidget(self.image_label)
         layout.addWidget(self.title_label)
 
     def set_frame(self, jpeg_bytes: bytes) -> None:
-        img = QImage.fromData(jpeg_bytes, "JPEG")
+        img = QImage.fromData(jpeg_bytes, b"JPEG")
         if img.isNull():
             return
         pix = QPixmap.fromImage(img).scaled(
             max(self.image_label.width(), 320), max(self.image_label.height(), 180),
-            Qt.KeepAspectRatio, Qt.SmoothTransformation)
+            Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
         self.image_label.setPixmap(pix)
 
 

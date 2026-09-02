@@ -81,7 +81,7 @@ class UpdateDialog(QDialog):
         self.setWindowTitle("Atualização Disponível")
         self.setMinimumWidth(450)
         self.setMinimumHeight(350)
-        self.setWindowModality(Qt.WindowModal)
+        self.setWindowModality(Qt.WindowModality.WindowModal)
 
         self._release = release_info
         self._choice: str = "later"
@@ -141,7 +141,7 @@ class UpdateDialog(QDialog):
 
         # Progress dialog
         self._progress = QProgressDialog("Baixando atualização...", "Cancelar", 0, 100, self)
-        self._progress.setWindowModality(Qt.WindowModal)
+        self._progress.setWindowModality(Qt.WindowModality.WindowModal)
         self._progress.setMinimumDuration(0)
         self._progress.setValue(0)
 
@@ -161,7 +161,7 @@ class UpdateDialog(QDialog):
         # Fechar todas as janelas e instalar
         app = QApplication.instance()
         if app:
-            app.closeAllWindows()
+            QApplication.closeAllWindows()
             app.quit()
 
         install_update(file_path)

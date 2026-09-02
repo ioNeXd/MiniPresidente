@@ -14,6 +14,7 @@ import logging
 import threading
 
 import mss
+import mss.base
 from PIL import Image
 
 logger = logging.getLogger(__name__)
@@ -23,9 +24,9 @@ logger = logging.getLogger(__name__)
 _thread_local = threading.local()
 
 
-def _get_sct() -> mss.mss:
+def _get_sct() -> mss.base.MSSBase:
     """Retorna uma instância mss thread-local (uma por thread)."""
-    sct: mss.mss | None = getattr(_thread_local, "sct", None)
+    sct: mss.base.MSSBase | None = getattr(_thread_local, "sct", None)
     if sct is None:
         sct = mss.mss()
         _thread_local.sct = sct

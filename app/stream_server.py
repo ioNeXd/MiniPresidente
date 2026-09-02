@@ -87,8 +87,11 @@ class StreamServer:
 
     def _accept_loop(self) -> None:
         while self._running:
+            sock = self._sock
+            if sock is None:
+                break
             try:
-                conn, _addr = self._sock.accept()
+                conn, _addr = sock.accept()
             except OSError:
                 break
             threading.Thread(target=self._serve_client, args=(conn,), daemon=True).start()
