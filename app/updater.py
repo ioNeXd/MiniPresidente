@@ -26,6 +26,11 @@ from app.update_state import (
 
 logger = logging.getLogger(__name__)
 
+if not hasattr(subprocess, "DETACHED_PROCESS"):
+    setattr(subprocess, "DETACHED_PROCESS", 0x8)
+if not hasattr(subprocess, "CREATE_NO_WINDOW"):
+    setattr(subprocess, "CREATE_NO_WINDOW", 0x08000000)
+
 _GITHUB_API_URL = "https://api.github.com/repos/ioNeXd/MiniPresidente/releases/latest"
 _USER_AGENT = f"MiniPresidente/{__version__}"
 
@@ -43,9 +48,10 @@ def is_frozen() -> bool:
 def current_executable_path() -> str:
     """Retorna o caminho do executável atual.
 
-    Fora do runtime frozen, o update é ignorado em check_for_updates(),
-    mas quando houver um update válido a rota de instalação continua usando
-    o executável atual via sys.executable.
+    Encapsula a resolução do caminho para manter o código de instalação
+    independente de detalhes de runtime e do ambiente frozen. Em Windows,
+    sys.executable aponta para o binário final do app quando executado via
+    PyInstaller onefile; em dev/não-Windows, o update é ignorado.
     """
     return sys.executable
 
@@ -216,10 +222,7 @@ def install_update(new_exe_path: str) -> None:
 
    creation_flags = 0
    if sys.platform == "win32":
-       creation_flags = (
-           getattr(subprocess, "DETACHED_PROCESS", 0)
-           | getattr(subprocess, "CREATE_NO_WINDOW", 0)
-       )
+       creation_flags = subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW
 
    subprocess.Popen(
        ["cmd", "/c", bat_path],
