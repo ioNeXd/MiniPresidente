@@ -190,7 +190,7 @@ def verify_hash(file_path: str, hash_url: Optional[str]) -> bool:
 
 
 def create_update_script(new_exe_path: str, current_exe_path: str) -> str:
-   """Gera um .bat que substitui o executável atual (Windows only)."""
+   """Gera um .bat único que substitui o executável atual (Windows only)."""
    bat_content = f"""@echo off
 timeout /t 2 /nobreak >nul
 copy /Y "{new_exe_path}" "{current_exe_path}"
@@ -201,7 +201,8 @@ if %errorlevel% neq 0 (
 )
 start "" "{current_exe_path}"
 """
-   bat_path = os.path.join(tempfile.gettempdir(), f"{os.getpid()}_MiniPresidente_update.bat")
+   fd, bat_path = tempfile.mkstemp(suffix=".bat", prefix="MiniPresidente_update_")
+   os.close(fd)
    with open(bat_path, "w", encoding="utf-8") as f:
        f.write(bat_content)
    return bat_path

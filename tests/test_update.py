@@ -1,6 +1,7 @@
 """Testes mínimos para auto-update: versões, estado, hash, parsing de release."""
 
 import os
+import subprocess
 import tempfile
 from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
@@ -12,7 +13,7 @@ from app.update_state import (
     save_state,
     should_check_today,
 )
-from app.updater import compare_versions, fetch_latest_release, verify_hash
+from app.updater import compare_versions, create_update_script, fetch_latest_release, verify_hash
 
 # ─── compare_versions ─────────────────────────────────────────────────────
 
@@ -159,6 +160,55 @@ def test_download_worker_aborts_without_hash(monkeypatch):
     worker.run()
 
     assert not os.path.exists(path)
+
+
+def test_create_update_script_generates_unique_path_and_expected_content():
+    """Script de atualização deve usar nome único e conter o conteúdo esperado."""
+    new_exe = os.path.join(tempfile.gettempdir(), "MiniPresidente_new.exe")
+    current_exe = os.path.join(tempfile.gettempdir(), "MiniPresidente.exe")
+
+    bat_path_1 = create_update_script(new_exe, current_exe)
+    bat_path_2 = create_update_script(new_exe, current_exe)
+
+    try:
+        assert bat_path_1 != bat_path_2
+        assert bat_path_1.endswith(".bat")
+        assert bat_path_2.endswith(".bat")
+        assert os.path.exists(bat_path_1)
+        assert os.path.exists(bat_path_2)
+
+        with open(bat_path_1, "r", encoding="utf-8") as handle:
+            content = handle.read()
+
+        assert f'copy /Y "{new_exe}" "{current_exe}"' in content
+        assert f'start "" "{current_exe}"' in content
+    finally:
+        for path in (bat_path_1, bat_path_2):
+            if os.path.exists(path):
+                os.remove(path)
+
+
+def test_install_update_uses_cmd_c_without_shell(monkeypatch):
+    """install_update deve invocar cmd /c sem shell=True."""
+    recorded = {}
+
+    def fake_popen(args, **kwargs):
+        recorded["args"] = args
+        recorded["kwargs"] = kwargs
+        return object()
+
+    monkeypatch.setattr("app.updater.current_executable_path", lambda: r"C:\\Program Files\\MiniPresidente\\MiniPresidente.exe")
+    monkeypatch.setattr("app.updater.create_update_script", lambda *_args, **_kwargs: r"C:\Temp\MiniPresidente_update_123.bat")
+    monkeypatch.setattr("app.updater.subprocess.Popen", fake_popen)
+    monkeypatch.setattr("app.updater.sys.platform", "win32")
+
+    from app.updater import install_update
+
+    install_update(r"C:\Temp\MiniPresidente_new.exe")
+
+    assert recorded["args"] == ["cmd", "/c", r"C:\Temp\MiniPresidente_update_123.bat"]
+    assert recorded["kwargs"].get("shell") is None
+    assert recorded["kwargs"].get("creationflags") == (subprocess.DETACHED_PROCESS | subprocess.CREATE_NO_WINDOW)
 
 
 # ─── fetch_latest_release parsing ────────────────────────────────────────
