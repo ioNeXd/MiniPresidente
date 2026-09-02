@@ -7,6 +7,7 @@ import time
 import pytest
 
 import app.capture as capture_mod
+from app.session_config import SessionConfig
 from app.stream_server import StreamServer
 
 
@@ -43,7 +44,7 @@ def _read_one_frame(sock: socket.socket, timeout: float = 5.0) -> bytes:
 
 def test_single_viewer_receives_frame(synthetic_jpeg):
     """Um viewer isolado deve receber o último frame capturado."""
-    server = StreamServer(fps=30)
+    server = StreamServer(SessionConfig("", "", "", fps=30))
     server.start()
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.settimeout(5.0)
@@ -58,7 +59,7 @@ def test_single_viewer_receives_frame(synthetic_jpeg):
 
 def test_multiple_viewers_receive_frames(synthetic_jpeg):
     """Cada viewer deve receber ao menos um frame completo sem roubar o do outro."""
-    server = StreamServer(fps=30)
+    server = StreamServer(SessionConfig("", "", "", fps=30))
     server.start()
     clients: list[socket.socket] = []
     try:
@@ -83,7 +84,7 @@ def test_multiple_viewers_receive_frames(synthetic_jpeg):
 
 def test_stop_unblocks_viewers(synthetic_jpeg):
     """stop() deve liberar a espera de viewers e encerrar o serviço sem travar."""
-    server = StreamServer(fps=30)
+    server = StreamServer(SessionConfig("", "", "", fps=30))
     server.start()
     sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.settimeout(5.0)

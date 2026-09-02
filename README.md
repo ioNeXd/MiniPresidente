@@ -89,8 +89,6 @@ Edite `app/config.py` para ajustar:
 | `DISCOVERY_PORT` | `47001` | Porta UDP para descoberta de peers |
 | `BROADCAST_INTERVAL_S` | `1.5` | Intervalo entre anúncios de presença (segundos) |
 | `PEER_TIMEOUT_S` | `5.0` | Tempo sem anúncio até considerar peer offline (segundos) |
-| `MANUAL_ADVERTISE_IP` | `""` | IP manual para anúncio (override automático) |
-| `SEED_PEERS` | `[]` | IPs de peers para discovery via VPN |
 
 ## Auto-update (Windows frozen)
 

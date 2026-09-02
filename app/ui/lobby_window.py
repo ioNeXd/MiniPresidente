@@ -5,11 +5,18 @@ import logging
 import re
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QLabel, QLineEdit, QPushButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import (
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QPushButton,
+    QVBoxLayout,
+    QWidget,
+)
 
-import app.config
 from app.config import __version__
-from app.discovery import Discovery, detect_advertise_ip, parse_seed_peers
+from app.discovery import detect_advertise_ip, parse_seed_peers
+from app.session_config import SessionConfig
 from app.ui.room_window import RoomWindow
 
 logger = logging.getLogger(__name__)
@@ -49,7 +56,14 @@ class LobbyWindow(QWidget):
         layout.addWidget(self.room_input)
 
         # ─── Campo de IP anunciado ──────────────────────────────────────
-        layout.addWidget(QLabel("IP anunciado (VPN: Radmin/Hamachi):"))
+        ip_layout = QHBoxLayout()
+        ip_layout.addWidget(QLabel("IP anunciado (VPN: Radmin/Hamachi):"))
+        self.retry_ip_btn = QPushButton("🔄")
+        self.retry_ip_btn.setToolTip("Detectar novamente o IP anunciado")
+        self.retry_ip_btn.setFixedWidth(32)
+        self.retry_ip_btn.clicked.connect(self._retry_advertise_ip)
+        ip_layout.addWidget(self.retry_ip_btn)
+        layout.addLayout(ip_layout)
         self.ip_input = QLineEdit()
         self.ip_input.setText(detect_advertise_ip())
         self.ip_input.setPlaceholderText("Ex: 25.10.10.5")
@@ -78,7 +92,7 @@ class LobbyWindow(QWidget):
     def _enter_room(self) -> None:
         """
         Valida os campos de entrada, configura a descoberta e abre a janela da sala.
-        Salva IP manual e seed peers na configuração global.
+        Cria uma configuração isolada para esta sessão.
         """
         username = self.name_input.text().strip()
         room_name = self.room_input.text().strip()
@@ -100,18 +114,21 @@ class LobbyWindow(QWidget):
             return
 
         seed_peers = parse_seed_peers(seed_raw)
-        app.config.MANUAL_ADVERTISE_IP = manual_ip
-        app.config.SEED_PEERS = seed_peers
-
         room_id = room_name.lower()
+        session_config = SessionConfig(
+            username=username,
+            room_name=room_name,
+            room_id=room_id,
+            manual_advertise_ip=manual_ip,
+            seed_peers=seed_peers,
+        )
 
         logger.info("User '%s' joining room '%s' (IP=%s, seeds=%s)",
                      username, room_name, manual_ip, seed_peers)
 
-        discovery = Discovery(username, manual_advertise_ip=manual_ip, seed_peers=seed_peers)
-        discovery.set_room(room_id, room_name)
-        discovery.start()
-
-        self.room_window = RoomWindow(discovery, room_name, username)
+        self.room_window = RoomWindow(session_config)
         self.room_window.show()
         self.close()
+
+    def _retry_advertise_ip(self) -> None:
+        self.ip_input.setText(detect_advertise_ip())

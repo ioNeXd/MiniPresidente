@@ -10,20 +10,18 @@ import threading
 from typing import Callable
 
 from app.capture import capture_loop
-from app.config import DEFAULT_FPS, DEFAULT_JPEG_QUALITY, DEFAULT_MAX_WIDTH
+from app.session_config import SessionConfig
 
 logger = logging.getLogger(__name__)
 
 
 class SelfPreview:
-    def __init__(self, on_frame: Callable[[bytes], None], monitor_index: int = 1,
-                 fps: int = DEFAULT_FPS, quality: int = DEFAULT_JPEG_QUALITY,
-                 max_width: int = DEFAULT_MAX_WIDTH):
+    def __init__(self, session_config: SessionConfig, on_frame: Callable[[bytes], None]):
         self.on_frame = on_frame
-        self.monitor_index = monitor_index
-        self.fps = fps
-        self.quality = quality
-        self.max_width = max_width
+        self.monitor_index = session_config.monitor_index
+        self.fps = session_config.fps
+        self.quality = session_config.jpeg_quality
+        self.max_width = session_config.max_width
         self._running = False
         self._thread: threading.Thread | None = None
 

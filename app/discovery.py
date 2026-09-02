@@ -21,6 +21,7 @@ from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional
 
 from app.config import BROADCAST_INTERVAL_S, DISCOVERY_PORT, PEER_TIMEOUT_S
+from app.session_config import SessionConfig
 
 logger = logging.getLogger(__name__)
 
@@ -62,19 +63,17 @@ def parse_seed_peers(raw: str) -> list[str]:
     return result
 
 
-def detect_advertise_ip() -> str:
+def detect_advertise_ip(manual_advertise_ip: str = "") -> str:
     """Detecta o IP a ser anunciado no broadcast.
 
-    1. Se MANUAL_ADVERTISE_IP estiver definido, usa ele.
+    1. Se um IP manual estiver definido, usa ele.
     2. Enumera todos os IPs e prioriza os que NÃO são LAN comum
        (192.168.x, 10.x, 172.16-31.x) — costumam ser IPs de VPN.
     3. Fallback: 127.0.0.1.
     """
-    from app.config import MANUAL_ADVERTISE_IP
-
-    if MANUAL_ADVERTISE_IP:
-        logger.info("Using manual advertise IP: %s", MANUAL_ADVERTISE_IP)
-        return MANUAL_ADVERTISE_IP
+    if manual_advertise_ip:
+        logger.info("Using manual advertise IP: %s", manual_advertise_ip)
+        return manual_advertise_ip
 
     try:
         hostname = socket.gethostname()
@@ -116,18 +115,16 @@ def detect_advertise_ip() -> str:
 class Discovery:
     """Gerencia descoberta de peers via broadcast UDP e unicast/gossip."""
 
-    def __init__(self, username: str, manual_advertise_ip: str = "", seed_peers: Optional[List[str]] = None):
+    def __init__(self, session_config: SessionConfig):
         """Inicializa Discovery com socket UDP e estado compartilhado."""
-        from app import config as app_config
-
         self.user_id = str(uuid.uuid4())[:8]
-        self.username = username
+        self.username = session_config.username
         self._room_id = ""
         self._room_name = ""
         self._transmitting = False
         self._stream_port = 0
-        self._manual_advertise_ip = manual_advertise_ip or app_config.MANUAL_ADVERTISE_IP
-        self._seed_peers = list(seed_peers) if seed_peers else list(app_config.SEED_PEERS)
+        self._manual_advertise_ip = session_config.manual_advertise_ip
+        self._seed_peers = list(session_config.seed_peers)
 
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)

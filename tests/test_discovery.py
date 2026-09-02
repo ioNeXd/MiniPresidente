@@ -57,13 +57,7 @@ def test_detect_advertise_ip_returns_string():
 
 
 def test_detect_advertise_ip_with_manual_override():
-    import app.config
-    old = app.config.MANUAL_ADVERTISE_IP
-    app.config.MANUAL_ADVERTISE_IP = "10.0.0.1"
-    try:
-        assert detect_advertise_ip() == "10.0.0.1"
-    finally:
-        app.config.MANUAL_ADVERTISE_IP = old
+    assert detect_advertise_ip("10.0.0.1") == "10.0.0.1"
 
 
 # ─── _parse_peer_msg ─────────────────────────────────────────────────────

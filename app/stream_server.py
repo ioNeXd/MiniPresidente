@@ -15,18 +15,18 @@ import threading
 from typing import Optional
 
 from app.capture import capture_loop
-from app.config import DEFAULT_FPS, DEFAULT_JPEG_QUALITY, DEFAULT_MAX_WIDTH, MAX_FRAME_BYTES
+from app.config import MAX_FRAME_BYTES
+from app.session_config import SessionConfig
 
 logger = logging.getLogger(__name__)
 
 
 class StreamServer:
-    def __init__(self, monitor_index: int = 1, fps: int = DEFAULT_FPS,
-                 quality: int = DEFAULT_JPEG_QUALITY, max_width: int = DEFAULT_MAX_WIDTH):
-        self.monitor_index = monitor_index
-        self.fps = fps
-        self.quality = quality
-        self.max_width = max_width
+    def __init__(self, session_config: SessionConfig):
+        self.monitor_index = session_config.monitor_index
+        self.fps = session_config.fps
+        self.quality = session_config.jpeg_quality
+        self.max_width = session_config.max_width
 
         self._sock: Optional[socket.socket] = None
         self._running = False
@@ -148,5 +148,4 @@ class StreamServer:
                 conn.close()
             except OSError:
                 pass
-
 
