@@ -211,10 +211,12 @@ class RoomWindow(QMainWindow):
         UpdateDialog(release_info, parent=self).exec()
 
     def closeEvent(self, event) -> None:
+        if self._session_stopped:
+            event.accept()
+            return
+        self._session_stopped = True
         self.timer.stop()
-        if not self._session_stopped:
-            self._session_stopped = True
-            self.session.stop()
+        self.session.stop()
         from app.ui.lobby_window import LobbyWindow
 
         self.lobby_window = LobbyWindow()
