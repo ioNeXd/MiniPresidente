@@ -35,3 +35,14 @@ def test_close_event_stops_session_and_creates_one_lobby(monkeypatch):
 
     room.lobby_window.close()
     app.processEvents()
+
+
+def test_lobby_resolution_updates_video_bitrate_controls():
+    app = QApplication.instance() or QApplication([])
+    window = lobby_window.LobbyWindow()
+    window.resolution_combo.setCurrentIndex(window.resolution_combo.findData("720p"))
+    assert window.video_bitrate_input.minimum() == 1000
+    assert window.video_bitrate_input.maximum() == 6000
+    assert window.video_bitrate_input.value() == 2500
+    window.close()
+    app.processEvents()

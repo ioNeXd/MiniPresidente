@@ -40,7 +40,7 @@ def _capture_factory(width: int, height: int):
 
 
 def _start_server():
-    config = SessionConfig("", "", "", fps=30, video_bitrate_kbps=500)
+    config = SessionConfig("", "", "", fps=30, resolution="360p", video_bitrate_kbps=500)
     server = StreamServer(config, capture_fn=_capture_factory(64, 48))
     server.start()
     return server
@@ -106,7 +106,7 @@ def test_multiple_viewers_receive_ordered_packets():
 def test_server_accepts_injected_capture():
     width, height = 64, 48
     server = StreamServer(
-        SessionConfig("", "", "", fps=30, video_bitrate_kbps=500),
+        SessionConfig("", "", "", fps=30, resolution="360p", video_bitrate_kbps=500),
         capture_fn=_capture_factory(width, height),
     )
     server.start()

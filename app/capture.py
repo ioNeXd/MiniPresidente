@@ -30,7 +30,7 @@ def _get_sct() -> mss.base.MSSBase:
     """Retorna uma instância mss thread-local (uma por thread)."""
     sct: mss.base.MSSBase | None = getattr(_thread_local, "sct", None)
     if sct is None:
-        sct = mss.mss()
+        sct = mss.MSS()
         _thread_local.sct = sct
     return sct
 

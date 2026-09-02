@@ -44,7 +44,7 @@ class StreamServer:
     def __init__(self, session_config: SessionConfig,
                  capture_fn: CaptureFn = grab_rgb):
         self.monitor_index = session_config.monitor_index
-        self.fps = session_config.fps
+        self.fps = session_config.video_fps
         self.max_width = session_config.max_width
         self.bitrate_kbps = session_config.video_bitrate_kbps
         self._capture_fn = capture_fn

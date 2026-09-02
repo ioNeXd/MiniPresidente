@@ -6,17 +6,26 @@ import re
 
 from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
+    QComboBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QPushButton,
+    QSpinBox,
     QVBoxLayout,
     QWidget,
 )
 
+from app.capture import list_monitors
 from app.config import __version__
 from app.discovery import detect_advertise_ip, parse_seed_peers
-from app.session_config import SessionConfig
+from app.session_config import (
+    AUDIO_BITRATE_OPTIONS,
+    RESOLUTION_PRESETS,
+    VIDEO_FPS_OPTIONS,
+    SessionConfig,
+    nearest_resolution_bucket,
+)
 from app.ui.room_window import RoomWindow
 
 logger = logging.getLogger(__name__)
@@ -75,6 +84,38 @@ class LobbyWindow(QWidget):
         self.seed_input.setPlaceholderText("Ex: 25.10.10.5, 25.10.10.8")
         layout.addWidget(self.seed_input)
 
+        self._native_size = self._detect_native_size()
+        layout.addWidget(QLabel("Qualidade de vídeo:"))
+        quality_layout = QHBoxLayout()
+        self.resolution_combo = QComboBox()
+        for name in (*RESOLUTION_PRESETS.keys(), "origem"):
+            label = name
+            if name == "origem":
+                label = f"Origem ({self._native_size[0]}×{self._native_size[1]})"
+            self.resolution_combo.addItem(label, name)
+        self.resolution_combo.setCurrentIndex(self.resolution_combo.findData("1080p"))
+        self.resolution_combo.currentIndexChanged.connect(self._quality_changed)
+        quality_layout.addWidget(self.resolution_combo)
+        self.fps_combo = QComboBox()
+        for fps in VIDEO_FPS_OPTIONS:
+            self.fps_combo.addItem(str(fps), fps)
+        self.fps_combo.currentIndexChanged.connect(self._quality_changed)
+        quality_layout.addWidget(self.fps_combo)
+        self.video_bitrate_input = QSpinBox()
+        self.video_bitrate_input.setSuffix(" kbps")
+        self.video_bitrate_input.valueChanged.connect(self._bitrate_changed)
+        quality_layout.addWidget(self.video_bitrate_input)
+        self.audio_bitrate_combo = QComboBox()
+        for bitrate in AUDIO_BITRATE_OPTIONS:
+            self.audio_bitrate_combo.addItem(f"{bitrate} kbps", bitrate)
+        self.audio_bitrate_combo.setCurrentText("128 kbps")
+        quality_layout.addWidget(self.audio_bitrate_combo)
+        layout.addLayout(quality_layout)
+        self.quality_warning = QLabel("")
+        self.quality_warning.setStyleSheet("color:#8a6d3b; font-size:11px;")
+        layout.addWidget(self.quality_warning)
+        self._quality_changed()
+
         self.status_label = QLabel("")
         self.status_label.setStyleSheet("color:#c0392b; font-size:11px;")
         layout.addWidget(self.status_label)
@@ -115,12 +156,21 @@ class LobbyWindow(QWidget):
 
         seed_peers = parse_seed_peers(seed_raw)
         room_id = room_name.lower()
+        resolution = self.resolution_combo.currentData()
+        video_fps = self.fps_combo.currentData()
+        bitrate = self.video_bitrate_input.value()
+        max_width = self._native_size[0] if resolution == "origem" else RESOLUTION_PRESETS[resolution]["width"]
         session_config = SessionConfig(
             username=username,
             room_name=room_name,
             room_id=room_id,
             manual_advertise_ip=manual_ip,
             seed_peers=seed_peers,
+            max_width=max_width,
+            resolution=resolution,
+            video_fps=video_fps,
+            video_bitrate_kbps=bitrate,
+            audio_bitrate_kbps=self.audio_bitrate_combo.currentData(),
         )
 
         logger.info("User '%s' joining room '%s' (IP=%s, seeds=%s)",
@@ -132,3 +182,33 @@ class LobbyWindow(QWidget):
 
     def _retry_advertise_ip(self) -> None:
         self.ip_input.setText(detect_advertise_ip())
+
+    @staticmethod
+    def _detect_native_size() -> tuple[int, int]:
+        try:
+            monitor = list_monitors()[1]
+            return monitor["width"], monitor["height"]
+        except (IndexError, KeyError, OSError):
+            return (1920, 1080)
+
+    def _quality_changed(self) -> None:
+        resolution = self.resolution_combo.currentData()
+        preset = RESOLUTION_PRESETS[nearest_resolution_bucket(*self._native_size)] if resolution == "origem" else RESOLUTION_PRESETS[resolution]
+        self.video_bitrate_input.setRange(preset["min"], min(preset["max"], 20000))
+        self.video_bitrate_input.setValue(preset["bitrate"])
+        fps = self.fps_combo.currentData()
+        high_resolution = resolution == "1440p" or (
+            resolution == "origem" and nearest_resolution_bucket(*self._native_size) == "1440p"
+        )
+        if high_resolution and fps == 120:
+            self.quality_warning.setText("Combinação pesada, pode engasgar sem placa de captura dedicada.")
+        elif high_resolution and fps == 60:
+            self.quality_warning.setText("60 FPS em alta resolução pode exigir mais CPU e banda.")
+        else:
+            self.quality_warning.setText("")
+
+    def _bitrate_changed(self, value: int) -> None:
+        minimum = self.video_bitrate_input.minimum()
+        maximum = self.video_bitrate_input.maximum()
+        if value < minimum or value > maximum:
+            self.video_bitrate_input.setValue(max(minimum, min(value, maximum)))
