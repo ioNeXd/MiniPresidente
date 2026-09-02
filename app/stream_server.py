@@ -1,13 +1,13 @@
+from __future__ import annotations
+
 # ─── stream_server.py ──────────────────────────────────────────────────────
 # Servidor TCP: quando você está "transmitindo", cada amigo que quiser
-# assistir sua tela abre uma conexão TCP nova aqui. Cada conexão tem sua
-# própria thread, que captura e envia frames JPEG continuamente
-# (protocolo simples: 4 bytes de tamanho + payload JPEG).
+# assistir sua tela abre uma conexão TCP nova aqui.
 #
-# Isso substitui RTP/UDP/FEC/jitter-buffer do projeto original — em LAN,
-# TCP simples é bem mais fácil de acertar e "só funciona".
+# OTIMIZAÇÃO: em vez de capturar N vezes (1 por viewer), captura 1 frame
+# por intervalo e distribui o mesmo JPEG para todos os viewers via
+# threading.Event. Isso reduz CPU de O(N) para O(1).
 # ─────────────────────────────────────────────────────────────────────────────
-
 import logging
 import socket
 import struct
@@ -32,22 +32,34 @@ class StreamServer:
         self._sock: Optional[socket.socket] = None
         self._running = False
         self.port = 0
+
+        # Frame compartilhado: um capture por intervalo, distribuído a todos
+        self._current_frame: Optional[bytes] = None
+        self._frame_event = threading.Event()
+        self._frame_lock = threading.Lock()
+
         self._client_count = 0
-        self._lock = threading.Lock()
+        self._clients_lock = threading.Lock()
 
     def start(self) -> int:
         self._sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self._sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self._sock.bind(("0.0.0.0", 0))  # porta efêmera livre
+        self._sock.bind(("0.0.0.0", 0))
         self._sock.listen(8)
         self.port = self._sock.getsockname()[1]
         self._running = True
+
+        # Thread de captura: captura 1 frame e acorda todos os viewers
+        threading.Thread(target=self._capture_loop, daemon=True).start()
+        # Thread de aceitação de conexões
         threading.Thread(target=self._accept_loop, daemon=True).start()
+
         logger.info("StreamServer started on port %d", self.port)
         return self.port
 
     def stop(self) -> None:
         self._running = False
+        self._frame_event.set()  # Desperta threads bloqueadas
         if self._sock:
             try:
                 self._sock.close()
@@ -55,36 +67,53 @@ class StreamServer:
                 pass
         logger.info("StreamServer stopped")
 
+    def _capture_loop(self) -> None:
+        """Captura 1 frame por intervalo e distribui para todos os viewers."""
+        interval = 1.0 / max(1, self.fps)
+        while self._running:
+            start = time.time()
+            try:
+                frame = grab_jpeg(self.monitor_index, self.quality, self.max_width)
+                with self._frame_lock:
+                    self._current_frame = frame
+                self._frame_event.set()  # Acorda todos os viewers
+            except Exception:
+                logger.exception("Error capturing frame in StreamServer")
+            elapsed = time.time() - start
+            if elapsed < interval:
+                time.sleep(interval - elapsed)
+
     def _accept_loop(self) -> None:
         while self._running:
             try:
                 conn, _addr = self._sock.accept()
             except OSError:
-                # Socket fechado ou erro — termina a thread
                 break
             threading.Thread(target=self._serve_client, args=(conn,), daemon=True).start()
 
     def _serve_client(self, conn: socket.socket) -> None:
-        with self._lock:
+        with self._clients_lock:
             self._client_count += 1
         try:
-            interval = 1.0 / max(1, self.fps)
             while self._running:
-                start = time.time()
-                try:
-                    frame = grab_jpeg(self.monitor_index, self.quality, self.max_width)
-                except Exception:
+                self._frame_event.wait(timeout=2.0)
+                if not self._running:
                     break
+                self._frame_event.clear()
+
+                with self._frame_lock:
+                    frame = self._current_frame
+                if frame is None:
+                    continue
+
                 header = struct.pack(">I", len(frame))
                 try:
                     conn.sendall(header + frame)
                 except OSError:
+                    logger.info("Viewer disconnected")
                     break
-                elapsed = time.time() - start
-                if elapsed < interval:
-                    time.sleep(interval - elapsed)
         finally:
-            with self._lock:
+            with self._clients_lock:
                 self._client_count -= 1
             try:
                 conn.close()
@@ -93,5 +122,5 @@ class StreamServer:
 
     @property
     def viewer_count(self) -> int:
-        with self._lock:
+        with self._clients_lock:
             return self._client_count

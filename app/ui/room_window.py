@@ -1,4 +1,7 @@
+from __future__ import annotations
+
 # app/ui/room_window.py
+import logging
 from typing import Dict, Optional
 
 from PySide6.QtCore import QObject, Qt, QTimer, Signal
@@ -14,13 +17,15 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from app.config import GRID_COLUMNS
+from app.config import GRID_COLUMNS, __version__
 from app.discovery import Discovery, PeerInfo
 from app.self_preview import SelfPreview
 from app.stream_client import StreamClient
 from app.stream_server import StreamServer
 
-# ─── Estilos CSS centralizados (evita duplicação em 3+ lugares) ─────────
+logger = logging.getLogger(__name__)
+
+# ─── Estilos CSS centralizados ───────────────────────────────────────────
 STYLE_TRANSMIT_BTN = (
     "QPushButton { background:#c0392b; color:white; padding:10px 20px; "
     "font-weight:bold; border-radius:6px; }"
@@ -36,6 +41,21 @@ STYLE_STOP_BTN = (
 class Bridge(QObject):
     frame_ready = Signal(str, bytes)
     peer_disconnected = Signal(str)
+
+
+class _ManualUpdateWorker(QObject):
+    """Worker que roda check_for_updates em thread separada."""
+    result = Signal(object)  # dict ou None
+    finished_signal = Signal()
+
+    def run(self) -> None:
+        from app.updater import check_for_updates
+        try:
+            info = check_for_updates(force=True)
+        except Exception:
+            info = None
+        self.result.emit(info)
+        self.finished_signal.emit()
 
 
 class VideoTile(QWidget):
@@ -68,13 +88,19 @@ class VideoTile(QWidget):
         self.image_label.setPixmap(pix)
 
 
+def _sanitize_display_name(name: str) -> str:
+    """Sanitiza nome de peer para exibição segura na UI."""
+    return name[:32] if name else "Desconhecido"
+
+
 class RoomWindow(QMainWindow):
     def __init__(self, discovery: Discovery, room_name: str, username: str):
         super().__init__()
         self.discovery = discovery
         self.username = username
-        self.setWindowTitle(f"MiniPresidente — Sala: {room_name}")
+        self.setWindowTitle(f"MiniPresidente — Sala: {room_name} v{__version__}")
         self.resize(1000, 700)
+        self._update_in_progress = False
 
         self.bridge = Bridge()
         self.bridge.frame_ready.connect(self._on_frame_ready)
@@ -109,6 +135,11 @@ class RoomWindow(QMainWindow):
         self.transmit_btn.setStyleSheet(STYLE_TRANSMIT_BTN)
         self.transmit_btn.clicked.connect(self._toggle_transmit)
         controls.addWidget(self.transmit_btn)
+
+        self.update_btn = QPushButton("🔄 Verificar Atualizações")
+        self.update_btn.clicked.connect(self._check_updates)
+        controls.addWidget(self.update_btn)
+
         controls.addStretch()
         left_layout.addLayout(controls)
         main_layout.addWidget(left, stretch=3)
@@ -128,7 +159,8 @@ class RoomWindow(QMainWindow):
         active_ids = set()
         for p in peers:
             status = "🔴" if p.transmitting else "⚪"
-            self.member_list.addItem(f"{status} {p.username} ({p.ip})")
+            display_name = _sanitize_display_name(p.username)
+            self.member_list.addItem(f"{status} {display_name} ({p.ip})")
             active_ids.add(p.user_id)
 
             if p.transmitting and p.user_id not in self.clients:
@@ -141,7 +173,7 @@ class RoomWindow(QMainWindow):
                 self._stop_watching(uid)
 
     def _start_watching(self, peer: PeerInfo) -> None:
-        tile = VideoTile(peer.username)
+        tile = VideoTile(_sanitize_display_name(peer.username))
         self.tiles[peer.user_id] = tile
         self._relayout_grid()
 
@@ -179,7 +211,6 @@ class RoomWindow(QMainWindow):
     def _on_peer_disconnected(self, user_id: str) -> None:
         self._stop_watching(user_id)
 
-    # ─── Transmissão: decomposta em métodos auxiliares ─────────────────
     def _toggle_transmit(self) -> None:
         if self.stream_server:
             self._stop_transmission()
@@ -187,14 +218,12 @@ class RoomWindow(QMainWindow):
             self._start_transmission()
 
     def _start_transmission(self) -> None:
-        """Inicia a transmissão de tela."""
         self.stream_server = StreamServer()
         port = self.stream_server.start()
         self.discovery.set_transmitting(True, port)
         self.transmit_btn.setText("⏹ Parar Transmissão")
         self.transmit_btn.setStyleSheet(STYLE_STOP_BTN)
 
-        # Adiciona tile de preview local
         tile = VideoTile(f"{self.username} (você — transmitindo)")
         self.tiles[self.discovery.user_id] = tile
         self._relayout_grid()
@@ -206,7 +235,6 @@ class RoomWindow(QMainWindow):
         self.self_preview.start()
 
     def _stop_transmission(self) -> None:
-        """Para a transmissão de tela."""
         if self.stream_server:
             self.stream_server.stop()
             self.stream_server = None
@@ -217,12 +245,45 @@ class RoomWindow(QMainWindow):
         self.transmit_btn.setText("🔴 Transmitir")
         self.transmit_btn.setStyleSheet(STYLE_TRANSMIT_BTN)
 
-        # Remove tile de preview local
         tile = self.tiles.pop(self.discovery.user_id, None)
         if tile:
             self.grid.removeWidget(tile)
             tile.deleteLater()
         self._relayout_grid()
+
+    def _check_updates(self) -> None:
+        """Verificação manual de updates (chamada pelo botão)."""
+        if self._update_in_progress:
+            return
+        self._update_in_progress = True
+        self.update_btn.setEnabled(False)
+
+        from PySide6.QtCore import QThread
+
+
+        self._update_thread = QThread(self)
+        self._update_worker = _ManualUpdateWorker()
+        self._update_worker.moveToThread(self._update_thread)
+
+        self._update_worker.result.connect(self._on_update_check_result)
+        self._update_worker.finished_signal.connect(self._update_thread.quit)
+        self._update_thread.started.connect(self._update_worker.run)
+        self._update_thread.start()
+
+    def _on_update_check_result(self, release_info) -> None:
+        self._update_in_progress = False
+        self.update_btn.setEnabled(True)
+
+        if release_info is None:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.information(
+                self, "Verificação de Atualização",
+                f"Você já está na versão mais recente (v{__version__}).")
+            return
+
+        from app.ui.update_dialog import UpdateDialog
+        dialog = UpdateDialog(release_info, parent=self)
+        dialog.exec()
 
     def closeEvent(self, event) -> None:
         self.timer.stop()

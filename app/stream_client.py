@@ -1,8 +1,9 @@
+from __future__ import annotations
+
 # ─── stream_client.py ──────────────────────────────────────────────────────
 # Cliente TCP: conecta no stream_server de um peer e recebe frames JPEG
 # continuamente, entregando cada um via callback (a UI decide o que fazer).
 # ─────────────────────────────────────────────────────────────────────────────
-
 import logging
 import socket
 import struct
@@ -41,8 +42,7 @@ class StreamClient:
         logger.info("StreamClient stopped")
 
     def _recv_exact(self, n: int) -> Optional[bytes]:
-        """Recebe exatamente n bytes do socket. Usa bytearray para
-        eficiência — evita criar novo objeto bytes a cada chunk."""
+        """Recebe exatamente n bytes. Usa bytearray para eficiência."""
         buf = bytearray()
         while len(buf) < n:
             if not self._running or not self._sock:

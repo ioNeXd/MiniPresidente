@@ -1,16 +1,25 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.backends._legacy:_Backend"
+
 [project]
 name = "minipresidente"
-version = "1.0.0"
-description = "Screen sharing over LAN - like Discord but peer-to-peer"
+version = "0.1.0"
+description = "Compartilhamento de tela peer-to-peer para LAN/VPN"
 requires-python = ">=3.10"
+license = "MIT"
 dependencies = [
     "PySide6>=6.5",
     "mss>=9.0",
     "Pillow>=10.0",
+    "packaging>=23.0",
 ]
 
 [project.scripts]
 minipresidente = "app.main:main"
+
+[tool.setuptools.packages.find]
+include = ["app*"]
 
 [tool.ruff]
 target-version = "py310"

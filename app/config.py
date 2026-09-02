@@ -1,6 +1,10 @@
+from __future__ import annotations
+
 # ─── config.py ─────────────────────────────────────────────────────────────
 # Constantes centrais do MiniPresidente.
 # ─────────────────────────────────────────────────────────────────────────────
+# ATENÇÃO: sincronizar manualmente com pyproject.toml [project].version
+__version__ = "0.1.0"
 
 # ─── Discovery (UDP broadcast) ────────────────────────────────────────────
 DISCOVERY_PORT = 47001       # porta UDP de broadcast (presença/descoberta de salas)
@@ -19,12 +23,18 @@ GRID_COLUMNS = 2             # colunas no grid de telas da sala
 # Se preenchido pelo usuário, substitui a detecção automática de IP
 # no broadcast UDP. Útil para VPNs como Radmin/Hamachi onde o IP
 # da física (192.168.x.x) é diferente do IP da VPN (25.x.x.x).
-MANUAL_ADVERTISE_IP = ""
+MANUAL_ADVERTISE_IP: str = ""
+
+# ─── Seed peers (VPN discovery) ──────────────────────────────────────────
+# Lista de IPs de peers conhecidos para discovery via unicast em VPNs.
+# O broadcast UDP (255.255.255.255) não funciona em Radmin/Hamachi,
+# então em VPN o usuário informa o IP de pelo menos um peer(host) aqui.
+# Preenchido automaticamente pela UI antes de iniciar o Discovery.
+SEED_PEERS: list[str] = []
 
 
 def validate_config() -> None:
-    """Valida os valores de configuração no startup. Levanta ValueError
-    se algum valor estiver fora dos ranges aceitáveis."""
+    """Valida os valores de configuração no startup."""
     if not (1 <= DISCOVERY_PORT <= 65535):
         raise ValueError(f"DISCOVERY_PORT must be 1-65535, got {DISCOVERY_PORT}")
     if DEFAULT_FPS < 1:

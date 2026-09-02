@@ -5,26 +5,31 @@ from __future__ import annotations
 # Isso substitui toda a camada DXGI/WGC/NVENC do projeto C++ original —
 # mss usa a API nativa do SO por baixo dos panos, mas sem exigir que você
 # lide com ponteiros, COM ou enumeração manual.
+#
+# THREAD-SAFETY: mss não é thread-safe. Cada thread que captura deve
+# ter sua própria instância. Usamos threading.local() para isso.
 # ─────────────────────────────────────────────────────────────────────────────
 import io
 import logging
+import threading
 
 import mss
 from PIL import Image
 
 logger = logging.getLogger(__name__)
 
-# Singleton do mss para reutilização — criar/destroir por frame é ineficiente
-# e pode causar erros em algumas plataformas.
-_sct: mss.mss | None = None
+# Thread-local storage para instâncias mss — cada thread tem a sua,
+# evitando concorrência e crashes ao capturar de múltiplas threads.
+_thread_local = threading.local()
 
 
 def _get_sct() -> mss.mss:
-    """Retorna uma instância singleton do mss."""
-    global _sct
-    if _sct is None:
-        _sct = mss.mss()
-    return _sct
+    """Retorna uma instância mss thread-local (uma por thread)."""
+    sct: mss.mss | None = getattr(_thread_local, "sct", None)
+    if sct is None:
+        sct = mss.mss()
+        _thread_local.sct = sct
+    return sct
 
 
 def list_monitors() -> list[dict]:
@@ -44,7 +49,6 @@ def grab_jpeg(monitor_index: int = 1, quality: int = 60, max_width: int = 1280) 
     idx = monitor_index if 0 < monitor_index < len(monitors) else 1
 
     raw = sct.grab(monitors[idx])
-    # .rgb retorna os bytes do frame em formato RGB
     img = Image.frombytes("RGB", raw.size, raw.rgb, "raw", "RGB")
 
     if img.width > max_width:

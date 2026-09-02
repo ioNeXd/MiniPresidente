@@ -46,9 +46,7 @@ class SelfPreview:
                 frame = grab_jpeg(self.monitor_index, self.quality, self.max_width)
                 self.on_frame(frame)
             except Exception:
-                # Log erros de captura em vez de silenciar — ajuda no diagnóstico
-                # de problemas como permissão negada ou tela indisponível.
-                logger.exception("Error capturing frame")
+                logger.exception("Error capturing frame in SelfPreview")
             elapsed = time.time() - start
             if elapsed < interval:
                 time.sleep(interval - elapsed)
