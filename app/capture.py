@@ -57,13 +57,13 @@ def capture_loop(
     """
     interval = 1.0 / max(1, fps)
     while running():
-        start = time.time()
+        start = time.monotonic()
         try:
             frame = grab_jpeg(monitor_index, quality, max_width)
             on_frame(frame)
         except Exception:
             logger.exception("Error capturing frame")
-        elapsed = time.time() - start
+        elapsed = time.monotonic() - start
         if elapsed < interval:
             time.sleep(interval - elapsed)
 

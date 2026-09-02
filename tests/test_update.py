@@ -142,6 +142,25 @@ def test_verify_hash_no_hash_url():
     assert verify_hash("/nonexistent", None) is False
 
 
+def test_download_worker_aborts_without_hash(monkeypatch):
+    """Download sem hash deve falhar imediatamente em vez de continuar."""
+    from app.ui.update_dialog import DownloadWorker
+
+    path = os.path.join(tempfile.gettempdir(), f"dummy_{os.getpid()}.exe")
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC)
+    with os.fdopen(fd, "wb") as f:
+        f.write(b"payload")
+
+    monkeypatch.setattr("app.ui.update_dialog.tempfile.mkstemp", lambda *args, **kwargs: (os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC), path))
+    monkeypatch.setattr("app.ui.update_dialog.download_file", lambda *args, **kwargs: True)
+    monkeypatch.setattr("app.ui.update_dialog.verify_hash", lambda *args, **kwargs: False)
+
+    worker = DownloadWorker("https://example.com/update.exe", None)
+    worker.run()
+
+    assert not os.path.exists(path)
+
+
 # ─── fetch_latest_release parsing ────────────────────────────────────────
 def test_fetch_release_parsing():
     """Chama fetch_latest_release() com urlopen mockado e valida o parsing real."""
@@ -171,3 +190,26 @@ def test_fetch_release_parsing():
     assert result["release_notes"] == "Bug fixes and improvements"
     assert result["exe_url"] == "https://example.com/MiniPresidente.exe"
     assert result["hash_url"] == "https://example.com/MiniPresidente.exe.sha256"
+
+
+def test_fetch_release_rejects_missing_sha_asset():
+    """Release sem asset .sha256 deve ser rejeitada sem oferecer update."""
+    import json
+    from unittest.mock import MagicMock
+
+    fake_response = {
+        "tag_name": "v0.2.0",
+        "body": "Bug fixes and improvements",
+        "assets": [
+            {"name": "MiniPresidente.exe", "browser_download_url": "https://example.com/MiniPresidente.exe"},
+            {"name": "source.zip", "browser_download_url": "https://example.com/source.zip"},
+        ],
+    }
+
+    mock_resp = MagicMock()
+    mock_resp.read.return_value = json.dumps(fake_response).encode("utf-8")
+    mock_resp.__enter__ = lambda s: s
+    mock_resp.__exit__ = MagicMock(return_value=False)
+
+    with patch("app.updater.urllib.request.urlopen", return_value=mock_resp):
+        assert fetch_latest_release() is None

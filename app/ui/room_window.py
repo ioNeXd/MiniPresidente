@@ -160,7 +160,8 @@ class RoomWindow(QMainWindow):
 
     def _refresh_peers(self) -> None:
         """Atualiza lista de membros e conecta/desconecta viewers."""
-        peers = [p for p in self.discovery.get_peers() if p.room_id == self.discovery.room_id]
+        current_room = self.discovery.room_id
+        peers = [p for p in self.discovery.get_peers() if p.room_id == current_room]
 
         self.member_list.clear()
         self.member_list.addItem(f"🟢 {self.username} (você)")

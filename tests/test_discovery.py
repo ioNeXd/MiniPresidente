@@ -135,3 +135,52 @@ def test_parse_peer_msg_truncates_long_strings():
     assert len(peer.username) <= 64
     assert len(peer.room_id) <= 128
     assert len(peer.room_name) <= 128
+
+
+def test_parse_peer_msg_rejects_string_bool_and_non_bool_int():
+    for bad in ("true", "false", 1, 0):
+        msg = {
+            "user_id": "abc123",
+            "username": "TestUser",
+            "ip": "192.168.1.10",
+            "room_id": "sala",
+            "room_name": "Sala",
+            "transmitting": bad,
+            "stream_port": 50000,
+        }
+        try:
+            _parse_peer_msg(msg)
+            assert False, "Should have raised ValueError"
+        except ValueError:
+            pass
+
+
+def test_parse_peer_msg_accepts_zero_port_when_not_transmitting():
+    msg = {
+        "user_id": "abc123",
+        "username": "TestUser",
+        "ip": "192.168.1.10",
+        "room_id": "sala",
+        "room_name": "Sala",
+        "transmitting": False,
+        "stream_port": 0,
+    }
+    peer = _parse_peer_msg(msg)
+    assert peer.stream_port == 0
+    assert peer.transmitting is False
+
+
+def test_parse_peer_msg_rejects_missing_field():
+    msg = {
+        "user_id": "abc123",
+        "username": "TestUser",
+        "ip": "192.168.1.10",
+        "room_id": "sala",
+        "room_name": "Sala",
+        "stream_port": 50000,
+    }
+    try:
+        _parse_peer_msg(msg)
+        assert False, "Should have raised ValueError"
+    except ValueError:
+        pass

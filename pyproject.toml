@@ -16,6 +16,13 @@ dependencies = [
     "packaging>=23.0",
 ]
 
+[project.optional-dependencies]
+dev = [
+    "ruff",
+    "mypy",
+    "pytest",
+]
+
 [project.scripts]
 minipresidente = "app.main:main"
 

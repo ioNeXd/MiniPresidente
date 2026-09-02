@@ -35,6 +35,8 @@ class SelfPreview:
 
     def stop(self) -> None:
         self._running = False
+        if self._thread is not None:
+            self._thread.join(timeout=2.0)
         logger.info("SelfPreview stopped")
 
     def _run(self) -> None:

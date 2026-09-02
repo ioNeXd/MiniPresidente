@@ -15,7 +15,7 @@ PEER_TIMEOUT_S = 5.0         # tempo sem anúncio até considerar o peer offline
 DEFAULT_FPS = 15             # fps de cada stream (suba com cautela)
 DEFAULT_JPEG_QUALITY = 60    # 1-95, mais alto = melhor qualidade / mais banda
 DEFAULT_MAX_WIDTH = 1280     # downscale do frame antes de enviar (poupa banda/CPU)
-MAX_FRAME_BYTES = 16 * 1024 * 1024  # limite defensivo para JPEG em 1280px/60; evita payloads gigantes
+MAX_FRAME_BYTES = 32 * 1024 * 1024  # limite do protocolo de framing: rejeita payloads JPEG absurdamente grandes no fluxo de rede compartilhado entre server e client
 
 # ─── UI ───────────────────────────────────────────────────────────────────
 GRID_COLUMNS = 2             # colunas no grid de telas da sala

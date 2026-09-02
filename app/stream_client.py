@@ -41,6 +41,8 @@ class StreamClient:
                 self._sock.close()
             except OSError:
                 pass
+        if self._thread is not None:
+            self._thread.join(timeout=2.0)
         logger.info("StreamClient stopped")
 
     def _recv_exact(self, n: int) -> Optional[bytes]:
@@ -77,6 +79,11 @@ class StreamClient:
             (size,) = struct.unpack(">I", header)
             if size <= 0 or size > MAX_FRAME_BYTES:
                 logger.warning("Frame size %d out of bounds, dropping connection", size)
+                if self._sock:
+                    try:
+                        self._sock.close()
+                    except OSError:
+                        pass
                 break
             data = self._recv_exact(size)
             if data is None:

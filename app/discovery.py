@@ -34,7 +34,7 @@ class PeerInfo:
     room_name: str
     transmitting: bool
     stream_port: int
-    last_seen: float = field(default_factory=time.time)
+    last_seen: float = field(default_factory=time.monotonic)
 
 
 def _is_valid_ipv4(value: str) -> bool:
@@ -288,6 +288,7 @@ class Discovery:
             except (KeyError, ValueError):
                 continue
 
+            info.last_seen = time.monotonic()
             with self._lock:
                 self.peers[info.user_id] = info
                 on_change = self._on_change
@@ -297,7 +298,7 @@ class Discovery:
     def _reap_loop(self) -> None:
         while self._running:
             time.sleep(1.0)
-            now = time.time()
+            now = time.monotonic()
             removed = False
             with self._lock:
                 dead = [uid for uid, p in self.peers.items() if now - p.last_seen > PEER_TIMEOUT_S]
@@ -343,7 +344,7 @@ def _parse_peer_msg(msg: dict) -> PeerInfo:
         raise ValueError("Invalid room_name")
     if not isinstance(transmitting, bool):
         raise ValueError("Invalid transmitting")
-    if not isinstance(stream_port, int) or not (1 <= stream_port <= 65535):
+    if isinstance(stream_port, bool) or not isinstance(stream_port, int) or not (0 <= stream_port <= 65535):
         raise ValueError(f"Invalid port: {stream_port}")
 
     return PeerInfo(

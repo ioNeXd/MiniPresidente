@@ -48,11 +48,18 @@ class DownloadWorker(QObject):
                     self.progress.emit(pct)
 
             logger.info("Downloading update from %s", self.exe_url)
-            if not download_file(self.exe_url, dest, on_progress):
-                self.error.emit("Falha no download da atualização.")
+            if not download_file(self.exe_url, dest, on_progress, cancel_check=lambda: self._cancelled):
+                if os.path.exists(dest):
+                    os.remove(dest)
+                if self._cancelled:
+                    self.error.emit("Download cancelado.")
+                else:
+                    self.error.emit("Falha no download da atualização.")
                 return
 
             if self._cancelled:
+                if os.path.exists(dest):
+                    os.remove(dest)
                 return
 
             logger.info("Verifying SHA-256 hash")

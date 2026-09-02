@@ -13,7 +13,7 @@ import sys
 import tempfile
 import urllib.error
 import urllib.request
-from typing import Optional
+from typing import Callable, Optional
 
 from packaging.version import Version
 
@@ -112,7 +112,12 @@ def should_show_update(remote_version: str) -> bool:
     return not is_version_ignored(remote_version)
 
 
-def download_file(url: str, dest_path: str, progress_callback=None) -> bool:
+def download_file(
+    url: str,
+    dest_path: str,
+    progress_callback=None,
+    cancel_check: Optional[Callable[[], bool]] = None,
+) -> bool:
     """Baixa um arquivo com progresso. Retorna True se bem-sucedido."""
     req = urllib.request.Request(url, headers={"User-Agent": _USER_AGENT})
     try:
@@ -121,9 +126,15 @@ def download_file(url: str, dest_path: str, progress_callback=None) -> bool:
             downloaded = 0
             with open(dest_path, "wb") as f:
                 while True:
+                    if cancel_check and cancel_check():
+                        logger.info("Download cancelled before receiving next chunk")
+                        return False
                     chunk = resp.read(65536)
                     if not chunk:
                         break
+                    if cancel_check and cancel_check():
+                        logger.info("Download cancelled during transfer")
+                        return False
                     f.write(chunk)
                     downloaded += len(chunk)
                     if progress_callback and total > 0:

@@ -68,7 +68,9 @@ class StreamServer:
                 self._sock.close()
             except OSError:
                 pass
-        for conn in list(self._active_conns):
+        with self._clients_lock:
+            conns = list(self._active_conns)
+        for conn in conns:
             try:
                 conn.close()
             except OSError:
