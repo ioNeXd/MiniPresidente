@@ -96,12 +96,13 @@ class LobbyWindow(QWidget):
                 label = f"Origem ({self._native_size[0]}×{self._native_size[1]})"
             self.resolution_combo.addItem(label, name)
         self.resolution_combo.setCurrentIndex(self.resolution_combo.findData("1080p"))
-        self.resolution_combo.currentIndexChanged.connect(self._quality_changed)
+        self.resolution_combo.currentIndexChanged.connect(self._resolution_changed)
         quality_layout.addWidget(self.resolution_combo)
         self.fps_combo = QComboBox()
         for fps in VIDEO_FPS_OPTIONS:
             self.fps_combo.addItem(str(fps), fps)
-        self.fps_combo.currentIndexChanged.connect(self._quality_changed)
+        self.fps_combo.setCurrentText(str(RESOLUTION_PRESETS["1080p"]["fps"]))
+        self.fps_combo.currentIndexChanged.connect(self._fps_or_resolution_warning_changed)
         quality_layout.addWidget(self.fps_combo)
         self.video_bitrate_input = QSpinBox()
         self.video_bitrate_input.setSuffix(" kbps")
@@ -116,7 +117,7 @@ class LobbyWindow(QWidget):
         self.quality_warning = QLabel("")
         self.quality_warning.setStyleSheet("color:#8a6d3b; font-size:11px;")
         layout.addWidget(self.quality_warning)
-        self._quality_changed()
+        self._resolution_changed()
 
         self.status_label = QLabel("")
         self.status_label.setStyleSheet("color:#c0392b; font-size:11px;")
@@ -170,6 +171,7 @@ class LobbyWindow(QWidget):
             seed_peers=seed_peers,
             max_width=max_width,
             resolution=resolution,
+            native_size=self._native_size if resolution == "origem" else None,
             video_fps=video_fps,
             video_bitrate_kbps=bitrate,
             audio_bitrate_kbps=self.audio_bitrate_combo.currentData(),
@@ -197,11 +199,18 @@ class LobbyWindow(QWidget):
         except (IndexError, KeyError, OSError):
             return (1920, 1080)
 
-    def _quality_changed(self) -> None:
+    def _resolution_changed(self) -> None:
         resolution = self.resolution_combo.currentData()
         preset = RESOLUTION_PRESETS[nearest_resolution_bucket(*self._native_size)] if resolution == "origem" else RESOLUTION_PRESETS[resolution]
         self.video_bitrate_input.setRange(preset["min"], min(preset["max"], 20000))
         self.video_bitrate_input.setValue(preset["bitrate"])
+        self._update_quality_warning()
+
+    def _fps_or_resolution_warning_changed(self) -> None:
+        self._update_quality_warning()
+
+    def _update_quality_warning(self) -> None:
+        resolution = self.resolution_combo.currentData()
         fps = self.fps_combo.currentData()
         high_resolution = resolution == "1440p" or (
             resolution == "origem" and nearest_resolution_bucket(*self._native_size) == "1440p"

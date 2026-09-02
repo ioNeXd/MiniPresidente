@@ -47,20 +47,22 @@ class SessionConfig:
     jpeg_quality: int = DEFAULT_JPEG_QUALITY
     max_width: int = DEFAULT_MAX_WIDTH
     monitor_index: int = 1
+    native_size: tuple[int, int] | None = None
     video_bitrate_kbps: int = 5000
     resolution: str = "1080p"
     video_fps: int = 30
     audio_bitrate_kbps: int = 128
 
     def __post_init__(self) -> None:
-        self.validate()
+        self.validate(self.native_size)
 
     def validate(self, native_size: tuple[int, int] | None = None) -> None:
         if self.fps not in VIDEO_FPS_OPTIONS:
             raise ValueError(f"fps must be one of {VIDEO_FPS_OPTIONS}")
         if self.video_fps not in VIDEO_FPS_OPTIONS:
             raise ValueError(f"video_fps must be one of {VIDEO_FPS_OPTIONS}")
-        limits = resolution_limits(self.resolution, native_size or (self.max_width, self.max_width * 9 // 16))
+        effective_native_size = native_size if native_size is not None else self.native_size
+        limits = resolution_limits(self.resolution, effective_native_size)
         maximum = min(limits["max"], GLOBAL_VIDEO_BITRATE_MAX)
         if not limits["min"] <= self.video_bitrate_kbps <= maximum:
             raise ValueError(

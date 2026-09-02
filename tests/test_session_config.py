@@ -25,6 +25,27 @@ def test_nearest_bucket_uses_total_pixels():
     assert nearest_resolution_bucket(3440, 1440) == "1440p"
 
 
+def test_origin_uses_real_native_size_for_validation():
+    native_size = (1080, 1920)
+    bucket = nearest_resolution_bucket(*native_size)
+    config = SessionConfig(
+        "",
+        "",
+        "",
+        resolution="origem",
+        native_size=native_size,
+        video_bitrate_kbps=RESOLUTION_PRESETS[bucket]["bitrate"],
+    )
+    assert config.resolution == "origem"
+
+
+def test_origin_requires_native_size():
+    with pytest.raises(ValueError, match="native_size"):
+        SessionConfig("", "", "", resolution="origem")
+    with pytest.raises(ValueError, match="native_size"):
+        SessionConfig("", "", "", resolution="origem", native_size=None)
+
+
 def test_session_config_rejects_invalid_quality_values():
     with pytest.raises(ValueError, match="video_fps"):
         SessionConfig("", "", "", video_fps=29)

@@ -46,3 +46,18 @@ def test_lobby_resolution_updates_video_bitrate_controls():
     assert window.video_bitrate_input.value() == 2500
     window.close()
     app.processEvents()
+
+
+def test_lobby_fps_default_and_custom_bitrate_preservation():
+    app = QApplication.instance() or QApplication([])
+    window = lobby_window.LobbyWindow()
+    assert window.fps_combo.currentData() == 30
+
+    window.video_bitrate_input.setValue(3500)
+    window.fps_combo.setCurrentText("60")
+    assert window.video_bitrate_input.value() == 3500
+
+    window.resolution_combo.setCurrentIndex(window.resolution_combo.findData("720p"))
+    assert window.video_bitrate_input.value() == 2500
+    window.close()
+    app.processEvents()
