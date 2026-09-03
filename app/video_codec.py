@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from fractions import Fraction
+from threading import Event
 
 import av
 
@@ -52,6 +53,11 @@ class H264Encoder:
         self._codec.options = {"preset": "veryfast", "tune": "zerolatency"}
         self._codec.gop_size = max(1, round(config.fps * config.keyframe_interval_s))
         self._next_pts = 0
+        self._keyframe_requested = Event()
+
+    def request_keyframe(self) -> None:
+        """Force the next encoded frame to be an I-frame."""
+        self._keyframe_requested.set()
 
     def encode_frame(self, rgb_frame: bytes, width: int, height: int) -> list[bytes]:
         if (width, height) != (self.config.width, self.config.height):
@@ -61,6 +67,9 @@ class H264Encoder:
         frame = _packed_rgb_frame(rgb_frame, width, height)
         frame.pts = self._next_pts
         self._next_pts += 1
+        if self._keyframe_requested.is_set():
+            frame.pict_type = av.video.frame.PictureType.I
+            self._keyframe_requested.clear()
         return [bytes(packet) for packet in self._codec.encode(frame)]
 
     def flush(self) -> list[bytes]:

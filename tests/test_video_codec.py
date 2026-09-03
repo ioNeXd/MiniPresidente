@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import av
 from PIL import Image
 
 from app.video_codec import H264Decoder, H264Encoder, VideoCodecConfig
@@ -29,3 +30,22 @@ def test_h264_round_trip_and_bitrate():
 def test_h264_flush_without_frames():
     config = VideoCodecConfig(64, 48, 10, 200)
     assert H264Encoder(config).flush() == []
+
+
+def test_h264_encoder_requests_keyframe_on_next_frame():
+    encoder = H264Encoder(VideoCodecConfig(64, 48, 10, 200))
+    encoded_frames = []
+
+    class RecordingCodec:
+        def encode(self, frame):
+            encoded_frames.append(frame)
+            return []
+
+    encoder._codec = RecordingCodec()
+    rgb = bytes(64 * 48 * 3)
+    encoder.request_keyframe()
+    encoder.encode_frame(rgb, 64, 48)
+    encoder.encode_frame(rgb, 64, 48)
+
+    assert encoded_frames[0].pict_type == av.video.frame.PictureType.I
+    assert encoded_frames[1].pict_type != av.video.frame.PictureType.I

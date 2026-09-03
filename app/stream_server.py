@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from typing import Callable, Optional
 
 from app.capture import grab_rgb
-from app.config import MAX_FRAME_BYTES
+from app.config import MAX_CLIENT_QUEUE, MAX_FRAME_BYTES
 from app.session_config import SessionConfig
 from app.video_codec import H264Encoder, VideoCodecConfig
 
@@ -126,7 +126,18 @@ class StreamServer:
         with self._clients_lock:
             clients = list(self._clients)
         for client in clients:
-            client.packets.put(_frame_packet(packet))
+            framed = _frame_packet(packet)
+            try:
+                client.packets.put_nowait(framed)
+            except queue.Full:
+                try:
+                    client.packets.get_nowait()
+                except queue.Empty:
+                    pass
+                try:
+                    client.packets.put_nowait(framed)
+                except queue.Full:
+                    pass
 
     def _accept_loop(self) -> None:
         while self._running:
@@ -137,9 +148,11 @@ class StreamServer:
                 conn, _addr = sock.accept()
             except OSError:
                 break
-            client = _Client(conn, queue.Queue())
+            client = _Client(conn, queue.Queue(maxsize=MAX_CLIENT_QUEUE))
             with self._clients_lock:
                 self._clients.append(client)
+            if self._stream_ready.is_set() and hasattr(self, "_encoder"):
+                self._encoder.request_keyframe()
             client.thread = threading.Thread(target=self._serve_client, args=(client,), daemon=True)
             client.thread.start()
 

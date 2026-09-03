@@ -1,13 +1,15 @@
 """Testes do transporte H.264 do StreamServer em socket TCP."""
 
+import queue
 import socket
 import struct
 import time
 from threading import Event
 
+from app.config import MAX_CLIENT_QUEUE
 from app.session_config import SessionConfig
 from app.stream_client import StreamClient
-from app.stream_server import HANDSHAKE_FORMAT, HANDSHAKE_SIZE, StreamServer
+from app.stream_server import HANDSHAKE_FORMAT, HANDSHAKE_SIZE, StreamServer, _Client
 from app.video_codec import H264Decoder
 
 
@@ -119,3 +121,19 @@ def test_server_accepts_injected_capture():
             sock.close()
     finally:
         server.stop()
+
+
+def test_broadcast_drops_oldest_packet_when_client_queue_is_full():
+    server = StreamServer(SessionConfig("", "", "", video_fps=30, resolution="360p", video_bitrate_kbps=500))
+    client = _Client(socket.socket(), queue.Queue(maxsize=MAX_CLIENT_QUEUE))
+    for index in range(MAX_CLIENT_QUEUE):
+        client.packets.put_nowait(f"old-{index}".encode())
+    server._clients.append(client)
+
+    server._broadcast(b"new")
+
+    assert client.packets.qsize() == MAX_CLIENT_QUEUE
+    assert client.packets.get_nowait() == b"old-1"
+    remaining = list(client.packets.queue)
+    assert remaining[-1].endswith(b"new")
+    client.conn.close()

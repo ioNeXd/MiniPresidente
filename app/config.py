@@ -17,6 +17,7 @@ PEER_TIMEOUT_S = 5.0         # tempo sem anúncio até considerar o peer offline
 # resolução for aplicada.
 DEFAULT_MAX_WIDTH = 1280     # downscale do frame antes de enviar (poupa banda/CPU)
 MAX_FRAME_BYTES = 32 * 1024 * 1024  # limite do protocolo de framing: rejeita payloads JPEG absurdamente grandes no fluxo de rede compartilhado entre server e client
+MAX_CLIENT_QUEUE = 60        # backpressure por viewer: cerca de 2 s de vídeo a 30 FPS
 
 # ─── UI ───────────────────────────────────────────────────────────────────
 GRID_COLUMNS = 2             # colunas no grid de telas da sala
@@ -29,6 +30,8 @@ def validate_config() -> None:
         raise ValueError(f"DEFAULT_MAX_WIDTH must be >= 100, got {DEFAULT_MAX_WIDTH}")
     if MAX_FRAME_BYTES < 1:
         raise ValueError(f"MAX_FRAME_BYTES must be >= 1, got {MAX_FRAME_BYTES}")
+    if MAX_CLIENT_QUEUE < 1:
+        raise ValueError(f"MAX_CLIENT_QUEUE must be >= 1, got {MAX_CLIENT_QUEUE}")
     if GRID_COLUMNS < 1:
         raise ValueError(f"GRID_COLUMNS must be >= 1, got {GRID_COLUMNS}")
 
